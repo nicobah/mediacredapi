@@ -4,6 +4,7 @@ using Neo4j.Driver;
 using System.Text.Json;
 using Newtonsoft.Json;
 using System.Reflection;
+using MediaCred.Models;
 
 namespace MediaCred.Controllers
 {
@@ -40,76 +41,47 @@ namespace MediaCred.Controllers
         }
 
         [HttpGet("GetLinkInfo")]
-        public async Task GetLinkInfo(string url)
+        public async Task<string> GetLinkInfo(string url)
         {
             var query = @"MATCH (art:Article{link: $url})-[r]-(b)
                             RETURN art, r, b";
 
-            await ExecuteQuery(query, new { url });
+            return await ExecuteQuery(query, new { url });
         }
 
         [HttpPost("CreateArticle")]
-        public async Task CreateArticle(string artTitle, string? artGroundFact = null, string? artPublisher = null, string? artLink = null, string? artCreatedDate = null, string? artConclusion = null)
+        public async Task CreateArticle(Article art)
         {
-            var query = @"
-                CREATE (art:Article { 
-                    title: $artTitle, 
-                    groundFact: $artGroundFact, 
-                    publisher: $artPublisher, 
-                    link: $artLink, 
-                    createdDate: $artCreatedDate, 
-                    conclusion: $artConclusion
-                    })";
+            var query = $"CREATE (art:Article {{ title: \"{art.Title}\", publisher: \"{art.Publisher}\", link: \"{art.Link}\"}})";
 
-            await ExecuteQuery(query, new { artTitle, artGroundFact, artPublisher, artLink, artCreatedDate, artConclusion });
+            await ExecuteQuery(query, new { art.Title, art.Publisher, art.Link });
         }
 
         [HttpPost("CreateAuthor")]
-        public async Task CreateAuthor(string artTitle, string artPublisher, string authorName, string? age = null, string? company = null, string? physCompAddress = null, string? education = null, string? politicalOrientation = null)
+        public async Task CreateAuthor([FromQuery] Article article, [FromQuery] Author author)
         {
-            var query = @"
-                MATCH(art:Article{title: $artTitle, publisher: $artPublisher})
-                CREATE (a:Author { 
-                    name: $authorName, 
-                    age: $age, 
-                    company: $company, 
-                    physicalCompanyAddress: $physCompAddress, 
-                    education: $education, 
-                    politicalOrientation: $politicalOrientation
-                    }),
-                (art)-[:WRITTEN_BY]->(a)";
+            var query = $"MATCH(art:Article{{title: \"{article.Title}\", publisher: \"{article.Publisher}\"}}) CREATE (a:Author {{ name: \"{author.Name}\", age: \"{author.Age}\" }}), (art)-[:WRITTEN_BY]->(a)";
 
-            await ExecuteQuery(query, new { artTitle, artPublisher, authorName, age, company, physCompAddress, education, politicalOrientation });
+            await ExecuteQuery(query, new { article.Title, article.Publisher, author.Name, author.Age });
         }
 
         [HttpPost("CreateArgument")]
-        public async Task CreateArgument(string artTitle, string artPublisher, string claim, string? ground = null, string? warrant = null)
+        public async Task CreateArgument([FromQuery] Article article, [FromQuery] Argument argument)
         {
-            //To match with rel: MATCH(art:Article{title: $artTitle})-[:WRITTEN_BY]->(aut:Author{name: $authorName})
-            var query = @"
-                MATCH(art:Article{title: $artTitle, publisher: $artPublisher})
-                CREATE (arg:Argument { 
-                    claim: $claim, 
-                    ground: $ground, 
-                    warrant: $warrant
-                    }),
-                (art)-[:CLAIMS]->(arg)";
+            var query = $"MATCH(art:Article{{title: \"{article.Title}\", publisher: \"{article.Publisher}\"}}) CREATE (arg:Argument {{ claim: \"{argument.Claim}\", ground: \"{argument.Ground}\", warrant: \"{argument.Warrant}\"}}), (art)-[:CLAIMS]->(arg)";
 
-            await ExecuteQuery(query, new { artTitle, artPublisher, claim, ground, warrant });
+            await ExecuteQuery(query, new { article.Title, article.Publisher, argument.Claim, argument.Ground, argument.Warrant });
         }
 
         [HttpPost("CreateBacking")]
-        public async Task CreateBacking(string artTitle, string artPublisher, string argClaim)
+        public async Task CreateBacking([FromQuery] Article article, [FromQuery] Argument argument)
         {
-            var query = @"
-                MATCH(art:Article{title: $artTitle, publisher: $artPublisher}),
-                (arg:Argument{claim: $argClaim})
-                CREATE (arg)-[:BACKED_BY]->(art)";
+            var query = $"MATCH(art:Article{{title: \"{article.Title}\", publisher: \"{article.Publisher}\"}}), (arg:Argument{{claim: \"{argument.Claim}\"}}) CREATE (arg)-[:BACKED_BY]->(art)";
 
-            await ExecuteQuery(query, new { artTitle, artPublisher, argClaim });
+            await ExecuteQuery(query, new { article.Title, article.Publisher, argument.Claim });
         }
 
-        private async Task ExecuteQuery(string query, object parameters)
+        private async Task<string> ExecuteQuery(string query, object parameters)
         {
             await using var session = _driver.AsyncSession(configBuilder => configBuilder.WithDatabase("neo4j"));
             try
@@ -120,7 +92,10 @@ namespace MediaCred.Controllers
                     var result = await tx.RunAsync(query, parameters);
                     return await result.ToListAsync();
                 });
-                GetNodesFromResult(writeResults, parameters);
+                var results = await GetNodesFromResult(writeResults, parameters);
+                var relation = results.FirstOrDefault(x => x.OriginNode is Article && x.IsLeftToRight && x.FinalNode is Argument);
+                var article = relation != null ? relation.OriginNode as Article : new Article { Title="not found"};
+                return article.Title;
             }
             // Capture any errors along with the query and data for traceability
             catch (Neo4jException ex)
@@ -130,7 +105,7 @@ namespace MediaCred.Controllers
             }
         }
 
-        private async void GetNodesFromResult(List<IRecord> writeResults, object parameters)
+        private async Task<List<NodeRelation>> GetNodesFromResult(List<IRecord> writeResults, object parameters)
         {
             Console.WriteLine("");
 
@@ -139,6 +114,7 @@ namespace MediaCred.Controllers
             var arguments = new List<Argument>();
             var secondArguments = new List<Argument>();
             var relationships = new List<Relationship>();
+            var nodeRelations = new List<NodeRelation>();
             foreach (var result in writeResults)
             {
                 var relationJSON = JsonConvert.SerializeObject(result[1].As<IRelationship>());
@@ -154,17 +130,20 @@ namespace MediaCred.Controllers
                 var secondNodeArticle = JsonConvert.DeserializeObject<Article>(nodePropsSecondNode);
                 var relationship = JsonConvert.DeserializeObject<Relationship>(relationJSON);
 
+                var nodeRelation = new NodeRelation();
+
                 //The node on [0] and [2] can be any of the following types of node: Author, Argument, Article.
                 //The object will not be null when deserializing to the wrong type, but the properties will be empty/null, so check for those to correctly deserialize
-                var firstNode = "";
+                var firstNodeStr = "";
                 Type firstNodeType = null;
                 if (firstNodeAuthor != null && firstNodeAuthor.Name != null && firstNodeAuthor.Name.Length > 1)
                 {
                     var indexArticle = authors.FindIndex(x => x.Name.ToLower() == firstNodeAuthor.Name.ToLower());
                     if (indexArticle < 0)
                         authors.Add(firstNodeAuthor);
-                    firstNode = firstNodeAuthor.Name;
+                    firstNodeStr = firstNodeAuthor.Name;
                     firstNodeType = firstNodeAuthor.GetType();
+                    nodeRelation.OriginNode = firstNodeAuthor;
                 }
 
                 if (firstNodeArgument != null && firstNodeArgument.Claim != null && firstNodeArgument.Claim.Length > 1)
@@ -172,8 +151,9 @@ namespace MediaCred.Controllers
                     var indexArticle = arguments.FindIndex(x => x.Claim.ToLower() == firstNodeArgument.Claim.ToLower());
                     if (indexArticle < 0)
                         arguments.Add(firstNodeArgument);
-                    firstNode = firstNodeArgument.Claim;
+                    firstNodeStr = firstNodeArgument.Claim;
                     firstNodeType = firstNodeArgument.GetType();
+                    nodeRelation.OriginNode = firstNodeArgument;
                 }
 
                 if (firstNodeArticle != null && firstNodeArticle.Title != null && firstNodeArticle.Title.Length > 1)
@@ -181,8 +161,9 @@ namespace MediaCred.Controllers
                     var indexArticle = articles.FindIndex(x => x.Title.ToLower() == firstNodeArticle.Title.ToLower());
                     if (indexArticle < 0)
                         articles.Add(firstNodeArticle);
-                    firstNode = firstNodeArticle.Title;
+                    firstNodeStr = firstNodeArticle.Title;
                     firstNodeType = firstNodeArticle.GetType();
+                    nodeRelation.OriginNode = firstNodeArticle;
                 }
 
 
@@ -195,6 +176,7 @@ namespace MediaCred.Controllers
                         authors.Add(secondNodeAuthor);
                     secondNode = secondNodeAuthor.Name;
                     secondNodeType = secondNodeAuthor.GetType();
+                    nodeRelation.FinalNode = secondNodeAuthor;
                 }
                 else if (secondNodeArgument != null && secondNodeArgument.Claim != null && secondNodeArgument.Claim.Length > 1)
                 {
@@ -206,6 +188,7 @@ namespace MediaCred.Controllers
                     }
                     secondNode = secondNodeArgument.Claim;
                     secondNodeType = secondNodeArgument.GetType();
+                    nodeRelation.FinalNode = secondNodeArgument;
                 }
                 else if (secondNodeArticle != null && secondNodeArticle.Title != null && secondNodeArticle.Title.Length > 1)
                 {
@@ -214,6 +197,7 @@ namespace MediaCred.Controllers
                         articles.Add(secondNodeArticle);
                     secondNode = secondNodeArticle.Title;
                     secondNodeType = secondNodeArticle.GetType();
+                    nodeRelation.FinalNode = secondNodeArticle;
                 }
 
                 var relation = "";
@@ -223,12 +207,15 @@ namespace MediaCred.Controllers
                     if (indexRelation < 0)
                         relationships.Add(relationship);
                     relation = relationship.Type;
+                    nodeRelation.RelationshipNode = relationship;
                 }
 
                 var relationString = firstNodeType != null && secondNodeType != null
-                    ? FormatRelationString(firstNodeType, secondNodeType, relation, firstNode, secondNode)
+                    ? FormatRelationString(firstNodeType, secondNodeType, relation, firstNodeStr, secondNode)
                     : "Unknown Types.";
 
+                nodeRelation.IsLeftToRight = IsLeftToRight(firstNodeType, secondNodeType, relation);
+                nodeRelations.Add(nodeRelation);
                 Console.WriteLine(relationString);
 
             }
@@ -261,20 +248,36 @@ namespace MediaCred.Controllers
                 RETURN arg, r, b";
                 await ExecuteQuery(query, new { claimDesc });
             }
+
+            Console.WriteLine("Outputting nodeRelations:");
+            foreach(var rel in nodeRelations)
+            {
+                Console.WriteLine(rel.ToString());
+            }
+            
+            return nodeRelations;
         }
 
         private string FormatRelationString(Type firstNodeType, Type secondNodeType, string relation, string firstNode, string secondNode)
         {
             var direction = "??";
 
-            if ((firstNodeType == typeof(Article) && secondNodeType == typeof(Author))
-                || (firstNodeType == typeof(Article) && secondNodeType == typeof(Argument))
-                || (firstNodeType == typeof(Argument) && secondNodeType == typeof(Article) && relation.ToLower() == "backed_by"))
+            if (IsLeftToRight(firstNodeType, secondNodeType, relation))
                 direction = " - " + relation + " -> ";
             else
                 direction = " <- " + relation + " - ";
 
             return firstNode + direction + secondNode;
+        }
+
+        private bool IsLeftToRight(Type firstNodeType, Type secondNodeType, string relation)
+        {
+            if ((firstNodeType == typeof(Article) && secondNodeType == typeof(Author))
+                || (firstNodeType == typeof(Article) && secondNodeType == typeof(Argument))
+                || (firstNodeType == typeof(Argument) && secondNodeType == typeof(Article) && relation.ToLower() == "backed_by"))
+                return true;
+            else
+                return false;
         }
     }
 }

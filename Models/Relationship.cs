@@ -4,9 +4,14 @@
     {   
         public string Type { get; set; }
 
-        public override string ToString()
+        public string GetFullString()
         {
             return "Type: " + this.Type;
+        }
+
+        public override string ToString()
+        {
+            return "[:" + this.Type + "]";
         }
     }
 }

@@ -1,6 +1,9 @@
-﻿namespace MediaCred
+﻿using MediaCred.Models;
+using Microsoft.AspNetCore.SignalR;
+
+namespace MediaCred
 {
-    public class Argument
+    public class Argument : Node
     {
         public string Claim { get; set; }
 
@@ -8,9 +11,14 @@
 
         public string? Warrant { get; set; }
 
-        public override string ToString()
+        public override string GetFullString()
         {
             return "claim: " + this.Claim + " ground: " + this.Ground + " warrant: " + this.Warrant;
+        }
+
+        public override string ToString()
+        {
+            return this.Claim;
         }
     }
 }
