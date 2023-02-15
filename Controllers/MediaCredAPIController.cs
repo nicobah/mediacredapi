@@ -5,6 +5,8 @@ using System.Text.Json;
 using Newtonsoft.Json;
 using System.Reflection;
 using MediaCred.Models;
+using System.Text;
+using Microsoft.Extensions.Primitives;
 
 namespace MediaCred.Controllers
 {
@@ -37,11 +39,12 @@ namespace MediaCred.Controllers
             //var user = "neo4j";
             //var password = "k7by2DDGbQvb98r5geSqJMLf1TRBlL_EWeGHqhrxn8M";
             //var w = new MediaCredAPIController();
+
             return "true";
         }
 
         [HttpGet("GetLinkInfo")]
-        public async Task<string> GetLinkInfo(string url)
+        public async Task<Node> GetLinkInfo(string url)
         {
             var query = @"MATCH (art:Article{link: $url})-[r]-(b)
                             RETURN art, r, b";
@@ -49,18 +52,26 @@ namespace MediaCred.Controllers
             return await ExecuteQuery(query, new { url });
         }
 
+        [HttpGet("GetLinkCredibility")]
+        public async Task<string> GetLinkCredibility(string url)
+        {
+            //TODO: Create credibility calculation and return value
+            return "Not implemented yet.";
+        }
+
         [HttpPost("CreateArticle")]
         public async Task CreateArticle(Article art)
         {
-            var query = $"CREATE (art:Article {{ title: \"{art.Title}\", publisher: \"{art.Publisher}\", link: \"{art.Link}\"}})";
+            var query = GenerateCreateQuery(art);
 
-            await ExecuteQuery(query, new { art.Title, art.Publisher, art.Link });
+            await ExecuteQuery(query, new { art.Title, art.Publisher, art.Link});
         }
 
         [HttpPost("CreateAuthor")]
         public async Task CreateAuthor([FromQuery] Article article, [FromQuery] Author author)
         {
-            var query = $"MATCH(art:Article{{title: \"{article.Title}\", publisher: \"{article.Publisher}\"}}) CREATE (a:Author {{ name: \"{author.Name}\", age: \"{author.Age}\" }}), (art)-[:WRITTEN_BY]->(a)";
+            var query = $"MATCH(art:Article{{title: \"{article.Title}\", publisher: \"{article.Publisher}\"}}) ";
+            query += GenerateCreateQuery(author,"a") + ", (art)-[:WRITTEN_BY]->(a)";
 
             await ExecuteQuery(query, new { article.Title, article.Publisher, author.Name, author.Age });
         }
@@ -68,7 +79,8 @@ namespace MediaCred.Controllers
         [HttpPost("CreateArgument")]
         public async Task CreateArgument([FromQuery] Article article, [FromQuery] Argument argument)
         {
-            var query = $"MATCH(art:Article{{title: \"{article.Title}\", publisher: \"{article.Publisher}\"}}) CREATE (arg:Argument {{ claim: \"{argument.Claim}\", ground: \"{argument.Ground}\", warrant: \"{argument.Warrant}\"}}), (art)-[:CLAIMS]->(arg)";
+            var query = $"MATCH(art:Article{{title: \"{article.Title}\", publisher: \"{article.Publisher}\"}}) ";
+            query += GenerateCreateQuery(argument,"arg") + ", (art)-[:CLAIMS]->(arg)";
 
             await ExecuteQuery(query, new { article.Title, article.Publisher, argument.Claim, argument.Ground, argument.Warrant });
         }
@@ -81,7 +93,16 @@ namespace MediaCred.Controllers
             await ExecuteQuery(query, new { article.Title, article.Publisher, argument.Claim });
         }
 
-        private async Task<string> ExecuteQuery(string query, object parameters)
+        [HttpPost("UpdateArticle")]
+        public async Task<Node> UpdateArticle([FromQuery] Article art, [FromQuery] Article newArticle)
+        {
+            //TODO: Make the two incoming nodes to a wrapper class, else it wont work.
+            var query = GenerateUpdateQuery(art, newArticle);
+
+            return await ExecuteQuery(query, new { art.Title, art.Publisher, art.Link });
+        }
+
+        private async Task<Node> ExecuteQuery(string query, object parameters)
         {
             await using var session = _driver.AsyncSession(configBuilder => configBuilder.WithDatabase("neo4j"));
             try
@@ -94,8 +115,8 @@ namespace MediaCred.Controllers
                 });
                 var results = await GetNodesFromResult(writeResults, parameters);
                 var relation = results.FirstOrDefault(x => x.OriginNode is Article && x.IsLeftToRight && x.FinalNode is Argument);
-                var article = relation != null ? relation.OriginNode as Article : new Article { Title="not found"};
-                return article.Title;
+                var article = relation != null ? relation.OriginNode as Article : new Article { Title = "not found" };
+                return article;
             }
             // Capture any errors along with the query and data for traceability
             catch (Neo4jException ex)
@@ -103,6 +124,54 @@ namespace MediaCred.Controllers
                 Console.WriteLine($"{query} - {ex}");
                 throw;
             }
+        }
+
+        private string GenerateCreateQuery(object obj, string objID = "o")
+        {
+            var sb = new StringBuilder();
+            try
+            {
+                sb.Append("CREATE (" + objID + ":" + obj.GetType().Name + " { ");
+                sb.Append(GeneratePropertiesString(obj, false, ':', objID));
+                sb.Append("})");
+            }
+            catch (Exception ex) { }
+
+            return sb.ToString();
+        }
+
+        private string GenerateUpdateQuery(object obj, object updateObj)
+        {
+            var sb = new StringBuilder();
+            try
+            {
+                var identifier = "o";
+                sb.Append("MATCH ("+identifier+":" + obj.GetType().Name + " { ");
+                sb.Append(GeneratePropertiesString(obj, false, ':') + "}) ");
+                sb.Append("SET " + GeneratePropertiesString(updateObj, true, '=', identifier));
+            }
+            catch(Exception ex) { }
+
+            return sb.ToString();
+        }
+
+        private string GeneratePropertiesString(object obj, bool isUpdate, char equalColon, string identifier = "o")
+        {
+            var sb = new StringBuilder();
+            var properties = obj.GetType().GetProperties();
+            for (int i = 0; i < properties.Length; i++)
+            {
+                var prop = properties[i];
+                if (prop.GetValue(obj) != null && prop.GetValue(obj).ToString().Length > 0)
+                {
+                    if (i != 0)
+                        sb.Append(", ");
+                    if (isUpdate)
+                        sb.Append(identifier+".");
+                    sb.Append(prop.Name.ToLower() + equalColon + " \"" + prop.GetValue(obj) + "\"");
+                }
+            }
+            return sb.ToString().Trim();
         }
 
         private async Task<List<NodeRelation>> GetNodesFromResult(List<IRecord> writeResults, object parameters)
@@ -250,11 +319,11 @@ namespace MediaCred.Controllers
             }
 
             Console.WriteLine("Outputting nodeRelations:");
-            foreach(var rel in nodeRelations)
+            foreach (var rel in nodeRelations)
             {
                 Console.WriteLine(rel.ToString());
             }
-            
+
             return nodeRelations;
         }
 
