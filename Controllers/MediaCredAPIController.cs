@@ -9,7 +9,7 @@ namespace MediaCred.Controllers
 {
     [ApiController]
     [Route("[controller]")]
-    public class WeatherForecastController : ControllerBase
+    public class MediaCredAPIController : ControllerBase
     {
 
         private bool _disposed = false;
@@ -19,31 +19,24 @@ namespace MediaCred.Controllers
         //    _driver = GraphDatabase.Driver(uri, AuthTokens.Basic(user, password));
         //}
 
-        private readonly ILogger<WeatherForecastController> _logger;
+        private readonly ILogger<MediaCredAPIController> _logger;
 
 
 
-        public WeatherForecastController()
+        public MediaCredAPIController()
         {
             _driver = GraphDatabase.Driver("neo4j+s://64d3b06c.databases.neo4j.io", AuthTokens.Basic("neo4j", "k7by2DDGbQvb98r5geSqJMLf1TRBlL_EWeGHqhrxn8M"));
 
         }
 
-        [HttpGet(Name = "GetWeatherForecast")]
-        public async Task Get()
+        [HttpGet("IsUp")]
+        public async Task<string> IsUp()
         {
-
-            var uri = "neo4j+s://64d3b06c.databases.neo4j.io";
-
-            var user = "neo4j";
-            var password = "k7by2DDGbQvb98r5geSqJMLf1TRBlL_EWeGHqhrxn8M";
-            var w = new WeatherForecastController();
-            /*await w.CreateArticle("TestArt-A", artPublisher: "TestPub-A");
-            await w.CreateArticle("TestArt-GroundFact1", artGroundFact: "GroundFact-A", artPublisher: "TestPub-GroundFact1");
-            await w.CreateAuthor("TestArt-A", "TestPub-A", "Author-A");
-            await w.CreateAuthor("TestArt-GroundFact1", "TestPub-GroundFact1", "Author-GroundFact1");
-            await w.CreateArgument("TestArt-A", "TestPub-A", "TestClaim-A");
-            await w.CreateBacking("TestArt-GroundFact1", "TestPub-GroundFact1", "TestClaim-A");*/
+            //var uri = "neo4j+s://64d3b06c.databases.neo4j.io";
+            //var user = "neo4j";
+            //var password = "k7by2DDGbQvb98r5geSqJMLf1TRBlL_EWeGHqhrxn8M";
+            //var w = new MediaCredAPIController();
+            return "true";
         }
 
         [HttpGet("GetLinkInfo")]
