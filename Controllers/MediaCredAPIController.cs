@@ -43,20 +43,40 @@ namespace MediaCred.Controllers
             return "true";
         }
 
-        [HttpGet("GetLinkInfo")]
-        public async Task<Node> GetLinkInfo(string url)
-        {
-            var query = @"MATCH (art:Article{link: $url})-[r]-(b)
-                            RETURN art, r, b";
+        //[HttpGet("GetLinkInfo")]
+        //public async Task<Node> GetLinkInfo(string url)
+        //{
+        //    var query = @"MATCH (art:Article{link: $url})-[r]-(b)
+        //                    RETURN art, r, b";
 
-            return await ExecuteQuery(query, new { url });
-        }
+        //    return await ExecuteQuery(query, new { url });
+        //}
 
         [HttpGet("GetLinkCredibility")]
         public async Task<string> GetLinkCredibility(string url)
         {
             //TODO: Create credibility calculation and return value
             return "Not implemented yet.";
+        }
+
+        [HttpGet("GetLinkToulmin")]
+        public async Task<string> GetLinkToulmin(string url)
+        {
+            var query = @"MATCH (art:Article{link: $url})-[r]->(b:Argument), (b)-[rTwo]->(a:Article)
+                            RETURN art, r, b, a, rTwo";
+
+            var results = await ExecuteQuery(query, new { url });
+
+            if(results.Count == 0)
+            {
+                query = @"MATCH (art:Article{link: $url})-[r]->(b:Argument)
+                            RETURN art, r, b";
+                
+                results = await ExecuteQuery(query, new { url });
+            }
+
+
+            return await GetToulminString(results);
         }
 
         [HttpPost("CreateArticle")]
@@ -93,16 +113,16 @@ namespace MediaCred.Controllers
             await ExecuteQuery(query, new { article.Title, article.Publisher, argument.Claim });
         }
 
-        [HttpPost("UpdateArticle")]
-        public async Task<Node> UpdateArticle([FromQuery] Article art, [FromQuery] Article newArticle)
-        {
-            //TODO: Make the two incoming nodes to a wrapper class, else it wont work.
-            var query = GenerateUpdateQuery(art, newArticle);
+        //[HttpPost("UpdateArticle")]
+        //public async Task<Node> UpdateArticle([FromQuery] Article art, [FromQuery] Article newArticle)
+        //{
+        //    //TODO: Make the two incoming nodes to a wrapper class, else it wont work.
+        //    var query = GenerateUpdateQuery(art, newArticle);
 
-            return await ExecuteQuery(query, new { art.Title, art.Publisher, art.Link });
-        }
+        //    return await ExecuteQuery(query, new { art.Title, art.Publisher, art.Link });
+        //}
 
-        private async Task<Node> ExecuteQuery(string query, object parameters)
+        private async Task<List<NodeRelation>> ExecuteQuery(string query, object parameters)
         {
             await using var session = _driver.AsyncSession(configBuilder => configBuilder.WithDatabase("neo4j"));
             try
@@ -114,9 +134,9 @@ namespace MediaCred.Controllers
                     return await result.ToListAsync();
                 });
                 var results = await GetNodesFromResult(writeResults, parameters);
-                var relation = results.FirstOrDefault(x => x.OriginNode is Article && x.IsLeftToRight && x.FinalNode is Argument);
-                var article = relation != null ? relation.OriginNode as Article : new Article { Title = "not found" };
-                return article;
+                //var relation = results.FirstOrDefault(x => x.OriginNode is Article && x.IsLeftToRight && x.FinalNode is Argument);
+                //var article = relation != null ? relation.OriginNode as Article : new Article { Title = "not found" };
+                return results;
             }
             // Capture any errors along with the query and data for traceability
             catch (Neo4jException ex)
@@ -172,6 +192,66 @@ namespace MediaCred.Controllers
                 }
             }
             return sb.ToString().Trim();
+        }
+
+        private async Task<string> GetToulminString(List<NodeRelation> nodeRelations)
+        {
+            if(nodeRelations.Count < 2)
+            {
+                if(nodeRelations.First().FinalNode is Argument)
+                {
+                    var argNode = (Argument)nodeRelations.First().FinalNode;
+                    if (argNode.Warrant != null && argNode.Warrant.Length > 1)
+                    {
+                        return "normal fit";
+                    }
+                }
+
+                return "weak fit";
+            }
+
+            var artNodeFirst = (Article)nodeRelations.First().OriginNode;
+            var argNodeFirst = (Argument)nodeRelations.First().FinalNode;
+
+            if (argNodeFirst.Warrant == null || argNodeFirst.Warrant.Length < 2 || argNodeFirst.Ground == null || argNodeFirst.Ground.Length < 2)
+                return "weak fit";
+
+            var backingNodeList = nodeRelations.Where(x => x.RelationshipNode.Type.ToLower() == "backed_by").ToList();
+            var rebuttalNodeList = nodeRelations.Where(x => x.RelationshipNode.Type.ToLower() == "disputed_by").ToList();
+
+            if (backingNodeList.Count > 0 && rebuttalNodeList.Count == 0)
+                return "good fit";
+
+            if (rebuttalNodeList.Count > 0 && backingNodeList.Count == 0)
+                return "bad fit";
+
+            if (argNodeFirst.Warrant != null && argNodeFirst.Warrant.Length > 1 && argNodeFirst.Ground != null && argNodeFirst.Ground.Length > 1 && backingNodeList.Count == 0 && rebuttalNodeList.Count == 0)
+                return "normal fit";
+
+            if(backingNodeList.Count > 0 && rebuttalNodeList.Count > 0)
+            {
+                var backingScore = 0;
+                var rebutScore = 0;
+
+                foreach(var backing in backingNodeList)
+                {
+                    var artBack = (Article)backing.FinalNode;
+                    if(artBack.Credibility.HasValue)
+                        backingScore += artBack.Credibility.Value;
+                }
+
+                foreach (var rebut in rebuttalNodeList)
+                {
+                    var artRebut = (Article)rebut.FinalNode;
+                    if (artRebut.Credibility.HasValue)
+                        backingScore += artRebut.Credibility.Value;
+                }
+
+                var fit = backingScore > rebutScore ? "good fit" : "bad fit";
+                return fit;
+            }
+
+            return "unknown";
         }
 
         private async Task<List<NodeRelation>> GetNodesFromResult(List<IRecord> writeResults, object parameters)
