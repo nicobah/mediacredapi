@@ -63,15 +63,15 @@ namespace MediaCred.Controllers
         public async Task<string> GetLinkToulmin(string url)
         {
             var query = @"MATCH (art:Article{link: $url})-[r]->(b:Argument), (b)-[rTwo]->(a:Article)
-                            RETURN art, r, b, a, rTwo";
+                            RETURN art, r, b, rTwo, a";
 
             var results = await ExecuteQuery(query, new { url });
 
-            if(results.Count == 0)
+            if (results.Count == 0)
             {
                 query = @"MATCH (art:Article{link: $url})-[r]->(b:Argument)
                             RETURN art, r, b";
-                
+
                 results = await ExecuteQuery(query, new { url });
             }
 
@@ -84,14 +84,14 @@ namespace MediaCred.Controllers
         {
             var query = GenerateCreateQuery(art);
 
-            await ExecuteQuery(query, new { art.Title, art.Publisher, art.Link});
+            await ExecuteQuery(query, new { art.Title, art.Publisher, art.Link });
         }
 
         [HttpPost("CreateAuthor")]
         public async Task CreateAuthor([FromQuery] Article article, [FromQuery] Author author)
         {
             var query = $"MATCH(art:Article{{title: \"{article.Title}\", publisher: \"{article.Publisher}\"}}) ";
-            query += GenerateCreateQuery(author,"a") + ", (art)-[:WRITTEN_BY]->(a)";
+            query += GenerateCreateQuery(author, "a") + ", (art)-[:WRITTEN_BY]->(a)";
 
             await ExecuteQuery(query, new { article.Title, article.Publisher, author.Name, author.Age });
         }
@@ -100,7 +100,7 @@ namespace MediaCred.Controllers
         public async Task CreateArgument([FromQuery] Article article, [FromQuery] Argument argument)
         {
             var query = $"MATCH(art:Article{{title: \"{article.Title}\", publisher: \"{article.Publisher}\"}}) ";
-            query += GenerateCreateQuery(argument,"arg") + ", (art)-[:CLAIMS]->(arg)";
+            query += GenerateCreateQuery(argument, "arg") + ", (art)-[:CLAIMS]->(arg)";
 
             await ExecuteQuery(query, new { article.Title, article.Publisher, argument.Claim, argument.Ground, argument.Warrant });
         }
@@ -122,7 +122,7 @@ namespace MediaCred.Controllers
         //    return await ExecuteQuery(query, new { art.Title, art.Publisher, art.Link });
         //}
 
-        private async Task<List<NodeRelation>> ExecuteQuery(string query, object parameters)
+        private async Task<List<IRecord>> ExecuteQuery(string query, object parameters)
         {
             await using var session = _driver.AsyncSession(configBuilder => configBuilder.WithDatabase("neo4j"));
             try
@@ -133,10 +133,10 @@ namespace MediaCred.Controllers
                     var result = await tx.RunAsync(query, parameters);
                     return await result.ToListAsync();
                 });
-                var results = await GetNodesFromResult(writeResults, parameters);
+
                 //var relation = results.FirstOrDefault(x => x.OriginNode is Article && x.IsLeftToRight && x.FinalNode is Argument);
                 //var article = relation != null ? relation.OriginNode as Article : new Article { Title = "not found" };
-                return results;
+                return writeResults;
             }
             // Capture any errors along with the query and data for traceability
             catch (Neo4jException ex)
@@ -166,11 +166,11 @@ namespace MediaCred.Controllers
             try
             {
                 var identifier = "o";
-                sb.Append("MATCH ("+identifier+":" + obj.GetType().Name + " { ");
+                sb.Append("MATCH (" + identifier + ":" + obj.GetType().Name + " { ");
                 sb.Append(GeneratePropertiesString(obj, false, ':') + "}) ");
                 sb.Append("SET " + GeneratePropertiesString(updateObj, true, '=', identifier));
             }
-            catch(Exception ex) { }
+            catch (Exception ex) { }
 
             return sb.ToString();
         }
@@ -187,74 +187,85 @@ namespace MediaCred.Controllers
                     if (i != 0)
                         sb.Append(", ");
                     if (isUpdate)
-                        sb.Append(identifier+".");
+                        sb.Append(identifier + ".");
                     sb.Append(prop.Name.ToLower() + equalColon + " \"" + prop.GetValue(obj) + "\"");
                 }
             }
             return sb.ToString().Trim();
         }
 
-        private async Task<string> GetToulminString(List<NodeRelation> nodeRelations)
+        private async Task<string> GetToulminString(List<IRecord> resultRecords)
         {
-            if(nodeRelations.Count < 2)
+            try
             {
-                if(nodeRelations.First().FinalNode is Argument)
+                if (resultRecords.Any())
                 {
-                    var argNode = (Argument)nodeRelations.First().FinalNode;
-                    if (argNode.Warrant != null && argNode.Warrant.Length > 1)
+                    var backingScore = 0;
+                    var backingCount = 0;
+
+                    var rebutScore = 0;
+                    var rebuttalCount = 0;
+
+                    foreach (var record in resultRecords)
                     {
+                        var artOriginNode = JsonConvert.DeserializeObject<Article>(JsonConvert.SerializeObject(record[0].As<INode>().Properties));
+                        var claimedByRelation = JsonConvert.DeserializeObject<Relationship>(JsonConvert.SerializeObject(record[1].As<IRelationship>()));
+                        var argumentNode = JsonConvert.DeserializeObject<Argument>(JsonConvert.SerializeObject(record[2].As<INode>().Properties));
+
+                        if (record.Keys.Count <= 3)
+                        {
+                            if (argumentNode.Warrant != null && argumentNode.Warrant.Length > 1 && argumentNode.Ground != null && argumentNode.Ground.Length > 1)
+                            {
+                                return "normal fit";
+                            }
+
+                            return "weak fit";
+                        }
+
+                        if (record.Keys.Count == 5)
+                        {
+                            var backedOrDisputedRelation = JsonConvert.DeserializeObject<Relationship>(JsonConvert.SerializeObject(record[3].As<IRelationship>()));
+                            var backingOrRebutNode = JsonConvert.DeserializeObject<Article>(JsonConvert.SerializeObject(record[4].As<INode>().Properties));
+
+                            if(artOriginNode.Link != backingOrRebutNode.Link)
+                            {
+                                if (argumentNode.Warrant == null || argumentNode.Warrant.Length < 2 || argumentNode.Ground == null || argumentNode.Ground.Length < 2)
+                                    return "weak fit";
+
+                                if (backedOrDisputedRelation.Type.ToLower() == "backed_by")
+                                {
+                                    backingCount++;
+                                    backingScore += backingOrRebutNode.Credibility.HasValue ? backingOrRebutNode.Credibility.Value : 0;
+                                }
+                                else if (backedOrDisputedRelation.Type.ToLower() == "disputed_by")
+                                {
+                                    rebuttalCount++;
+                                    rebutScore += backingOrRebutNode.Credibility.HasValue ? backingOrRebutNode.Credibility.Value : 0;
+                                }
+                            }
+                        }
+                    }
+                    if (backingCount > 0 && rebuttalCount == 0)
+                        return "good fit";
+
+                    if (rebuttalCount > 0 && backingCount == 0)
+                        return "bad fit";
+
+                    if (backingCount == 0 && rebuttalCount == 0)
                         return "normal fit";
+
+                    if (backingCount > 0 && rebuttalCount > 0)
+                    {
+                        return backingScore > rebutScore ? "good fit" : "bad fit";
                     }
                 }
-
-                return "weak fit";
             }
-
-            var artNodeFirst = (Article)nodeRelations.First().OriginNode;
-            var argNodeFirst = (Argument)nodeRelations.First().FinalNode;
-
-            if (argNodeFirst.Warrant == null || argNodeFirst.Warrant.Length < 2 || argNodeFirst.Ground == null || argNodeFirst.Ground.Length < 2)
-                return "weak fit";
-
-            var backingNodeList = nodeRelations.Where(x => x.RelationshipNode.Type.ToLower() == "backed_by").ToList();
-            var rebuttalNodeList = nodeRelations.Where(x => x.RelationshipNode.Type.ToLower() == "disputed_by").ToList();
-
-            if (backingNodeList.Count > 0 && rebuttalNodeList.Count == 0)
-                return "good fit";
-
-            if (rebuttalNodeList.Count > 0 && backingNodeList.Count == 0)
-                return "bad fit";
-
-            if (argNodeFirst.Warrant != null && argNodeFirst.Warrant.Length > 1 && argNodeFirst.Ground != null && argNodeFirst.Ground.Length > 1 && backingNodeList.Count == 0 && rebuttalNodeList.Count == 0)
-                return "normal fit";
-
-            if(backingNodeList.Count > 0 && rebuttalNodeList.Count > 0)
-            {
-                var backingScore = 0;
-                var rebutScore = 0;
-
-                foreach(var backing in backingNodeList)
-                {
-                    var artBack = (Article)backing.FinalNode;
-                    if(artBack.Credibility.HasValue)
-                        backingScore += artBack.Credibility.Value;
-                }
-
-                foreach (var rebut in rebuttalNodeList)
-                {
-                    var artRebut = (Article)rebut.FinalNode;
-                    if (artRebut.Credibility.HasValue)
-                        backingScore += artRebut.Credibility.Value;
-                }
-
-                var fit = backingScore > rebutScore ? "good fit" : "bad fit";
-                return fit;
-            }
+            catch { }
 
             return "unknown";
         }
 
-        private async Task<List<NodeRelation>> GetNodesFromResult(List<IRecord> writeResults, object parameters)
+        private async Task<List<NodeRelation>> GetNodesFromResult(List<IRecord> writeResults)
         {
             Console.WriteLine("");
 
