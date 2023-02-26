@@ -76,7 +76,7 @@ namespace MediaCred.Controllers
             }
 
 
-            return await GetToulminString(results);
+            return JsonConvert.SerializeObject(await GetToulminString(results), Formatting.Indented);
         }
 
         [HttpPost("CreateArticle")]
