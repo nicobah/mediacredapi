@@ -53,7 +53,7 @@ namespace MediaCred.Controllers
         //}
 
         [HttpGet("AuthorCredibility")]
-        public async Task<string> GetAuthorCredibility(int authorId, List<(string, double)> evalParams)
+        public async Task<string> GetAuthorCredibility(int authorId,[FromBody] List<(string, double)> evalParams)
         {
             return JsonConvert.SerializeObject(evalParams);
         }
