@@ -52,6 +52,12 @@ namespace MediaCred.Controllers
         //    return await ExecuteQuery(query, new { url });
         //}
 
+        [HttpGet("AuthorCredibility")]
+        public async Task<string> GetAuthorCredibility(List<(string, double)> evalParams)
+        {
+            return JsonConvert.SerializeObject(evalParams);
+        }
+
         [HttpGet("GetLinkCredibility")]
         public async Task<string> GetLinkCredibility(string url)
         {
