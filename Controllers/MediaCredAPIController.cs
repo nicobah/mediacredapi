@@ -7,6 +7,7 @@ using System.Reflection;
 using MediaCred.Models;
 using System.Text;
 using Microsoft.Extensions.Primitives;
+using Newtonsoft.Json.Linq;
 
 namespace MediaCred.Controllers
 {
@@ -52,10 +53,10 @@ namespace MediaCred.Controllers
         //    return await ExecuteQuery(query, new { url });
         //}
 
-        [HttpGet("AuthorCredibility")]
-        public async Task<string> GetAuthorCredibility(int authorId,[FromBody] List<(string, double)> evalParams)
+        [HttpPost("AuthorCredibility")]
+        public async Task<string> GetAuthorCredibility(AuthorEvalDto dto)
         {
-            return JsonConvert.SerializeObject(evalParams);
+            return JsonConvert.SerializeObject("f");
         }
 
         [HttpGet("GetLinkCredibility")]
@@ -233,7 +234,7 @@ namespace MediaCred.Controllers
                             var backedOrDisputedRelation = JsonConvert.DeserializeObject<Relationship>(JsonConvert.SerializeObject(record[3].As<IRelationship>()));
                             var backingOrRebutNode = JsonConvert.DeserializeObject<Article>(JsonConvert.SerializeObject(record[4].As<INode>().Properties));
 
-                            if(artOriginNode.Link != backingOrRebutNode.Link)
+                            if (artOriginNode.Link != backingOrRebutNode.Link)
                             {
                                 if (argumentNode.Warrant == null || argumentNode.Warrant.Length < 2 || argumentNode.Ground == null || argumentNode.Ground.Length < 2)
                                     return "weak fit";
