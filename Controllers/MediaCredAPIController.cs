@@ -73,6 +73,26 @@ namespace MediaCred.Controllers
 
         }
 
+        [HttpPost("ArticleCredibility")]
+        public async Task<string> GetArticleCredibility(ArticleEvalDto dto)
+        {
+            var article = new Article() { Title = "N" };
+            //List of evaluation for a param, the weight it has, and the description of the eval
+            List<(double, double, string)> results = new List<(double, double, string)>();
+            foreach (var eval in dto.Evals)
+            {
+                var currentEval = TranslateEvalsArticle(eval.Key);
+                if (currentEval != null)
+                {
+                    results.Add((currentEval.GetEvaluation(article), eval.Value, currentEval.Description));
+                }
+            }
+
+            return JsonConvert.SerializeObject(results);
+
+
+        }
+
         [HttpGet("GetLinkCredibility")]
         public async Task<string> GetLinkCredibility(string url)
         {
@@ -467,6 +487,17 @@ namespace MediaCred.Controllers
             {
                 case "information":
                     return new AuthorInformationEvaluation();
+                default:
+                    return null;
+            }
+        }
+
+        private IArticleCredibilityEvaluation? TranslateEvalsArticle(string key)
+        {
+            switch (key)
+            {
+                case "information":
+                    return new ArticleInformationEvaluation();
                 default:
                     return null;
             }
