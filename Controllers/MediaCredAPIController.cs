@@ -56,7 +56,21 @@ namespace MediaCred.Controllers
         [HttpPost("AuthorCredibility")]
         public async Task<string> GetAuthorCredibility(AuthorEvalDto dto)
         {
-            return JsonConvert.SerializeObject("f");
+            var author = new Author() {Name = "N" };
+            //List of evaluation for a param, the weight it has, and the description of the eval
+            List<(double, double, string)> results = new List<(double, double, string)>();
+            foreach(var eval in dto.Evals)
+            {
+                var currentEval = TranslateEvals(eval.Key);
+                if (currentEval != null)
+                {
+                    results.Add((currentEval.GetEvaluation(author),eval.Value, currentEval.Description));
+                }
+            }
+
+            return JsonConvert.SerializeObject(results);
+
+
         }
 
         [HttpGet("GetLinkCredibility")]
@@ -445,6 +459,17 @@ namespace MediaCred.Controllers
                 return true;
             else
                 return false;
+        }
+
+        private IAuthorCredibilityEvaluation? TranslateEvals(string key)
+        {
+            switch (key)
+            {
+                case "information":
+                    return new AuthorInformationEvaluation();
+                default:
+                    return null;
+            }
         }
     }
 }
