@@ -8,6 +8,7 @@ using MediaCred.Models;
 using System.Text;
 using Microsoft.Extensions.Primitives;
 using Newtonsoft.Json.Linq;
+using MediaCred.Models.ArticleEvaluation;
 
 namespace MediaCred.Controllers
 {
@@ -76,21 +77,51 @@ namespace MediaCred.Controllers
         [HttpPost("ArticleCredibility")]
         public async Task<string> GetArticleCredibility(ArticleEvalDto dto)
         {
-            var article = new Article() { Title = "N" };
-            //List of evaluation for a param, the weight it has, and the description of the eval
-            List<(double, double, string)> results = new List<(double, double, string)>();
-            foreach (var eval in dto.Evals)
+            try
             {
-                var currentEval = TranslateEvalsArticle(eval.Key);
-                if (currentEval != null)
+                var article = await GetArticleByID(dto.ArticleID);
+                //List of evaluation for a param, the weight it has, and the description of the eval
+                List<(double, double, string)> results = new List<(double, double, string)>();
+                foreach (var eval in dto.Evals)
                 {
-                    results.Add((currentEval.GetEvaluation(article), eval.Value, currentEval.Description));
+                    var currentEval = TranslateEvalsArticle(eval.Key);
+                    if (currentEval != null)
+                    {
+                        results.Add((currentEval.GetEvaluation(article), eval.Value, currentEval.Description));
+                    }
                 }
+
+                return JsonConvert.SerializeObject(results);
             }
 
-            return JsonConvert.SerializeObject(results);
+            catch(Exception ex) { }
+            
+            return "failed";
+        }
 
+        private async Task<Article?> GetArticleByID(int id)
+        {
+            var query = @"MATCH (art:Article)
+                            WHERE ID(art)=$id
+                            RETURN art";
 
+            var results = await ExecuteQuery(query, new { id });
+
+            if(results != null && results.Count > 0)
+            {
+                return GetArticleFromResult(results);
+            }
+
+            return null;
+        }
+
+        private Article? GetArticleFromResult(List<IRecord> results)
+        {
+            var articleNode = results[0].Values.First().Value;
+
+            var articlePropsJson = JsonConvert.SerializeObject(articleNode.As<INode>().Properties);
+            
+            return JsonConvert.DeserializeObject<Article>(articlePropsJson);
         }
 
         [HttpGet("GetLinkCredibility")]
@@ -498,6 +529,10 @@ namespace MediaCred.Controllers
             {
                 case "information":
                     return new ArticleInformationEvaluation();
+                case "inappropriatewords":
+                    return new ArticleIWEvaluation();
+                case "references":
+                    return new ArticleRefEvaluation();
                 default:
                     return null;
             }

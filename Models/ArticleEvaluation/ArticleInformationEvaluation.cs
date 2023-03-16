@@ -1,4 +1,4 @@
-﻿namespace MediaCred.Models
+﻿namespace MediaCred.Models.ArticleEvaluation
 {
     public class ArticleInformationEvaluation : IArticleCredibilityEvaluation
     {
@@ -9,7 +9,7 @@
         {
             var propCount = typeof(Article).GetProperties().Length;
             //Calculate the weight for each property based on the number of properties in an author
-            double propertiesWeight = (double)100 / (double)propCount;
+            double propertiesWeight = 100 / (double)propCount;
             double result = 0;
             foreach (var prop in art.GetType().GetProperties())
             {

@@ -14,6 +14,8 @@ namespace MediaCred
 
         public int? Credibility { get; set; }
 
+        public int? References { get; set; } //Should probably be list of articles?
+
         public override string GetFullString()
         {
             return "Title: " + this.Title + " Publisher: " + this.Publisher + " Link: " + this.Link + " # of inappropriate words: " + this.InappropriateWords + " Credibility: " + this.Credibility;
