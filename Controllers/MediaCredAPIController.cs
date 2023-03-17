@@ -123,6 +123,30 @@ namespace MediaCred.Controllers
             return JsonConvert.SerializeObject(await GetToulminString(results), Formatting.Indented);
         }
 
+        [HttpGet("AuthorFilterName")]
+        public async Task<List<Author>> GetAuthorsByName(string name)
+        {
+            var query = $@"MATCH (n:Author)
+                            WHERE n.name CONTAINS '{name}' 
+                            RETURN n";
+
+
+            var results = await qs.ExecuteQuery(query, null);
+
+            if (results != null && results.Count > 0)
+            {
+                var authors = new List<Author>();
+                foreach (var res in results)
+                {
+                    authors.Add(GetAuthorFromResult(res));
+                }
+                return authors;
+            }
+
+            return null;
+
+        }
+
         [HttpPost("CreateArticle")]
         public async Task CreateArticle(Article art)
         {
@@ -478,6 +502,15 @@ namespace MediaCred.Controllers
             }
         }
 
+        private Author? GetAuthorFromResult(IRecord res)
+        {
+            var authorNode = res.Values.First().Value;
+
+            var authorPropsJson = JsonConvert.SerializeObject(authorNode.As<INode>().Properties);
+
+            return JsonConvert.DeserializeObject<Author>(authorPropsJson);
+        }
+
         private IArticleCredibilityEvaluation? TranslateEvalsArticle(string key)
         {
             switch (key)
@@ -494,5 +527,7 @@ namespace MediaCred.Controllers
                     return null;
             }
         }
+
+
     }
 }
