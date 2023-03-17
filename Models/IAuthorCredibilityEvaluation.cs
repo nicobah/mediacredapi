@@ -4,6 +4,6 @@
     {
         public string Name { get; set; }
         public string Description { get; set; }
-        public double GetEvaluation(Author auth);
+        public Task<double> GetEvaluation(Author auth);
     }
 }

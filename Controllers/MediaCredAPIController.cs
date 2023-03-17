@@ -9,6 +9,8 @@ using System.Text;
 using Microsoft.Extensions.Primitives;
 using Newtonsoft.Json.Linq;
 using MediaCred.Models.ArticleEvaluation;
+using MediaCred.Models.Services;
+using Microsoft.AspNetCore.Mvc.Formatters;
 
 namespace MediaCred.Controllers
 {
@@ -18,20 +20,16 @@ namespace MediaCred.Controllers
     {
 
         private bool _disposed = false;
-        private readonly IDriver _driver;
+        private readonly ILogger<MediaCredAPIController> _logger;
+        private QueryService qs;
         //public DriverIntroductionExample(string uri, string user, string password)
         //{
         //    _driver = GraphDatabase.Driver(uri, AuthTokens.Basic(user, password));
         //}
 
-        private readonly ILogger<MediaCredAPIController> _logger;
-
-
-
         public MediaCredAPIController()
         {
-            _driver = GraphDatabase.Driver("neo4j+s://64d3b06c.databases.neo4j.io", AuthTokens.Basic("neo4j", "k7by2DDGbQvb98r5geSqJMLf1TRBlL_EWeGHqhrxn8M"));
-
+            qs = new QueryService(_disposed,_logger);
         }
 
         [HttpGet("IsUp")]
@@ -57,20 +55,25 @@ namespace MediaCred.Controllers
         [HttpPost("AuthorCredibility")]
         public async Task<string> GetAuthorCredibility(AuthorEvalDto dto)
         {
-            var author = new Author() {Name = "N" };
-            //List of evaluation for a param, the weight it has, and the description of the eval
-            List<(double, double, string)> results = new List<(double, double, string)>();
-            foreach(var eval in dto.Evals)
+            try
             {
-                var currentEval = TranslateEvals(eval.Key);
-                if (currentEval != null)
+                var author = await qs.GetAuthorByID(dto.AuthorId);
+                //List of evaluation for a param, the weight it has, and the description of the eval
+                List<(double, double, string)> results = new List<(double, double, string)>();
+                foreach (var eval in dto.Evals)
                 {
-                    results.Add((currentEval.GetEvaluation(author),eval.Value, currentEval.Description));
+                    var currentEval = TranslateEvals(eval.Key);
+                    if (currentEval != null)
+                    {
+                        results.Add((currentEval.GetEvaluation(author).Result, eval.Value, currentEval.Description));
+                    }
                 }
+
+                return JsonConvert.SerializeObject(results);
             }
+            catch (Exception ex) { }
 
-            return JsonConvert.SerializeObject(results);
-
+            return "failed";
 
         }
 
@@ -79,7 +82,7 @@ namespace MediaCred.Controllers
         {
             try
             {
-                var article = await GetArticleByID(dto.ArticleID);
+                var article = await qs.GetArticleByLink(dto.ArticleLink);
                 //List of evaluation for a param, the weight it has, and the description of the eval
                 List<(double, double, string)> results = new List<(double, double, string)>();
                 foreach (var eval in dto.Evals)
@@ -87,7 +90,7 @@ namespace MediaCred.Controllers
                     var currentEval = TranslateEvalsArticle(eval.Key);
                     if (currentEval != null)
                     {
-                        results.Add((currentEval.GetEvaluation(article), eval.Value, currentEval.Description));
+                        results.Add((currentEval.GetEvaluation(article).Result, eval.Value, currentEval.Description));
                     }
                 }
 
@@ -99,37 +102,6 @@ namespace MediaCred.Controllers
             return "failed";
         }
 
-        private async Task<Article?> GetArticleByID(int id)
-        {
-            var query = @"MATCH (art:Article)
-                            WHERE ID(art)=$id
-                            RETURN art";
-
-            var results = await ExecuteQuery(query, new { id });
-
-            if(results != null && results.Count > 0)
-            {
-                return GetArticleFromResult(results);
-            }
-
-            return null;
-        }
-
-        private Article? GetArticleFromResult(List<IRecord> results)
-        {
-            var articleNode = results[0].Values.First().Value;
-
-            var articlePropsJson = JsonConvert.SerializeObject(articleNode.As<INode>().Properties);
-            
-            return JsonConvert.DeserializeObject<Article>(articlePropsJson);
-        }
-
-        [HttpGet("GetLinkCredibility")]
-        public async Task<string> GetLinkCredibility(string url)
-        {
-            //TODO: Create credibility calculation and return value
-            return "Not implemented yet.";
-        }
 
         [HttpGet("GetLinkToulmin")]
         public async Task<string> GetLinkToulmin(string url)
@@ -137,14 +109,14 @@ namespace MediaCred.Controllers
             var query = @"MATCH (art:Article{link: $url})-[r]->(b:Argument), (b)-[rTwo]->(a:Article)
                             RETURN art, r, b, rTwo, a";
 
-            var results = await ExecuteQuery(query, new { url });
+            var results = await qs.ExecuteQuery(query, new { url });
 
             if (results.Count == 0)
             {
                 query = @"MATCH (art:Article{link: $url})-[r]->(b:Argument)
                             RETURN art, r, b";
 
-                results = await ExecuteQuery(query, new { url });
+                results = await qs.ExecuteQuery(query, new { url });
             }
 
 
@@ -154,27 +126,29 @@ namespace MediaCred.Controllers
         [HttpPost("CreateArticle")]
         public async Task CreateArticle(Article art)
         {
-            var query = GenerateCreateQuery(art);
-
-            await ExecuteQuery(query, new { art.Title, art.Publisher, art.Link });
+            var query = $"MATCH(aut:Author{{id: \"{art.AuthorID}\"}}) ";
+            query += GenerateCreateQuery(art, objID: "a") + ", (a)-[:WRITTEN_BY]->(aut)";
+            
+            await qs.ExecuteQuery(query, new { art.Title, art.AuthorID, art.Publisher, art.Link, art.InappropriateWords, art.References, art.Topic });
         }
 
         [HttpPost("CreateAuthor")]
-        public async Task CreateAuthor([FromQuery] Article article, [FromQuery] Author author)
+        public async Task CreateAuthor(AuthorApiDto author)
         {
-            var query = $"MATCH(art:Article{{title: \"{article.Title}\", publisher: \"{article.Publisher}\"}}) ";
-            query += GenerateCreateQuery(author, "a") + ", (art)-[:WRITTEN_BY]->(a)";
+            author.ID = Guid.NewGuid().ToString();
 
-            await ExecuteQuery(query, new { article.Title, article.Publisher, author.Name, author.Age });
+            var query = GenerateCreateQuery(author, objtype: typeof(Author));
+
+            await qs.ExecuteQuery(query);
         }
 
         [HttpPost("CreateArgument")]
         public async Task CreateArgument([FromQuery] Article article, [FromQuery] Argument argument)
         {
             var query = $"MATCH(art:Article{{title: \"{article.Title}\", publisher: \"{article.Publisher}\"}}) ";
-            query += GenerateCreateQuery(argument, "arg") + ", (art)-[:CLAIMS]->(arg)";
+            query += GenerateCreateQuery(argument, objID: "arg") + ", (art)-[:CLAIMS]->(arg)";
 
-            await ExecuteQuery(query, new { article.Title, article.Publisher, argument.Claim, argument.Ground, argument.Warrant });
+            await qs.ExecuteQuery(query, new { article.Title, article.Publisher, argument.Claim, argument.Ground, argument.Warrant });
         }
 
         [HttpPost("CreateBacking")]
@@ -182,7 +156,7 @@ namespace MediaCred.Controllers
         {
             var query = $"MATCH(art:Article{{title: \"{article.Title}\", publisher: \"{article.Publisher}\"}}), (arg:Argument{{claim: \"{argument.Claim}\"}}) CREATE (arg)-[:BACKED_BY]->(art)";
 
-            await ExecuteQuery(query, new { article.Title, article.Publisher, argument.Claim });
+            await qs.ExecuteQuery(query, new { article.Title, article.Publisher, argument.Claim });
         }
 
         //[HttpPost("UpdateArticle")]
@@ -194,36 +168,17 @@ namespace MediaCred.Controllers
         //    return await ExecuteQuery(query, new { art.Title, art.Publisher, art.Link });
         //}
 
-        private async Task<List<IRecord>> ExecuteQuery(string query, object parameters)
-        {
-            await using var session = _driver.AsyncSession(configBuilder => configBuilder.WithDatabase("neo4j"));
-            try
-            {
-                // Write transactions allow the driver to handle retries and transient error
-                var writeResults = await session.ExecuteWriteAsync(async tx =>
-                {
-                    var result = await tx.RunAsync(query, parameters);
-                    return await result.ToListAsync();
-                });
+        
 
-                //var relation = results.FirstOrDefault(x => x.OriginNode is Article && x.IsLeftToRight && x.FinalNode is Argument);
-                //var article = relation != null ? relation.OriginNode as Article : new Article { Title = "not found" };
-                return writeResults;
-            }
-            // Capture any errors along with the query and data for traceability
-            catch (Neo4jException ex)
-            {
-                Console.WriteLine($"{query} - {ex}");
-                throw;
-            }
-        }
-
-        private string GenerateCreateQuery(object obj, string objID = "o")
+        private string GenerateCreateQuery(object obj, Type objtype = null, string objID = "o")
         {
             var sb = new StringBuilder();
             try
             {
-                sb.Append("CREATE (" + objID + ":" + obj.GetType().Name + " { ");
+                if (objtype == null)
+                    objtype = obj.GetType();
+
+                sb.Append("CREATE (" + objID + ":" + objtype.Name + " { ");
                 sb.Append(GeneratePropertiesString(obj, false, ':', objID));
                 sb.Append("})");
             }
@@ -478,7 +433,7 @@ namespace MediaCred.Controllers
                 var query = @"
                 MATCH (arg:Argument{claim: $claimDesc})-[r]-(b)
                 RETURN arg, r, b";
-                await ExecuteQuery(query, new { claimDesc });
+                await qs.ExecuteQuery(query, new { claimDesc });
             }
 
             Console.WriteLine("Outputting nodeRelations:");
@@ -533,6 +488,8 @@ namespace MediaCred.Controllers
                     return new ArticleIWEvaluation();
                 case "references":
                     return new ArticleRefEvaluation();
+                case "topic":
+                    return new ArticleTopicEvaluation();
                 default:
                     return null;
             }

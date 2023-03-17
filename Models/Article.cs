@@ -6,6 +6,8 @@ namespace MediaCred
     {
         public string Title { get; set; }
 
+        public string AuthorID { get; set; }
+
         public string? Publisher { get; set; }
 
         public string? Link { get; set; }
@@ -15,6 +17,8 @@ namespace MediaCred
         public int? Credibility { get; set; }
 
         public int? References { get; set; } //Should probably be list of articles?
+
+        public string? Topic { get; set; }
 
         public override string GetFullString()
         {

@@ -1,9 +1,11 @@
 ﻿using MediaCred.Models;
+using Swashbuckle.AspNetCore.Annotations;
 
 namespace MediaCred
 {
     public class Author : Node
     {
+        public string ID { get; set; }
         public string Name { get; set; }
         public int? Age { get; set; }
         public string? Image { get; set; }
@@ -11,6 +13,8 @@ namespace MediaCred
         public string? Company { get; set;  }
         public string? Education { get; set; }
         public string? PoliticalOrientation { get; set; }
+        public string? AreaOfExpertise { get; set; } //Skills, kompetences etc.
+
         public override string GetFullString()
         {
             return "Name: " + this.Name + " Age: " + this.Age;

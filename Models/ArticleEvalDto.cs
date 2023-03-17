@@ -2,7 +2,7 @@
 {
     public class ArticleEvalDto
     {
-        public int ArticleID { get; set; }
+        public string ArticleLink { get; set; }
         public List<KeyValue> Evals { get; set; }
     }
 }

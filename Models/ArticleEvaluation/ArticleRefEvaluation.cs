@@ -5,7 +5,7 @@
         public string Name { get; set; } = "ArticleReferences";
         public string Description { get; set; } = "Evaluates the article based on the number of references. Having 1 reference gives 50% score, having 2 or more gives 100%. Will be expanded to take each references score into account.";
 
-        public double GetEvaluation(Article art)
+        public async Task<double> GetEvaluation(Article art)
         {
             //TO-DO:
             //Should be expanded to be a list of articles and get their credibility to calculate score.

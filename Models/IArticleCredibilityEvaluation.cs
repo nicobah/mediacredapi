@@ -4,6 +4,6 @@
     {
         public string Name { get; set; }
         public string Description { get; set; }
-        public double GetEvaluation(Article art);
+        public Task<double> GetEvaluation(Article art);
     }
 }
