@@ -11,6 +11,8 @@ namespace MediaCred
         public string? Company { get; set;  }
         public string? Education { get; set; }
         public string? PoliticalOrientation { get; set; }
+
+        public List<Article> Articles { get; set; }
         public override string GetFullString()
         {
             return "Name: " + this.Name + " Age: " + this.Age;
