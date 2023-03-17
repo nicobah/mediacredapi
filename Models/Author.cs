@@ -12,7 +12,7 @@ namespace MediaCred
         public string? Education { get; set; }
         public string? PoliticalOrientation { get; set; }
 
-        public List<Article> Articles { get; set; }
+        public List<Article>? Articles { get; set; }
         public override string GetFullString()
         {
             return "Name: " + this.Name + " Age: " + this.Age;
