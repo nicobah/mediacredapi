@@ -15,6 +15,8 @@ namespace MediaCred
         public string? PoliticalOrientation { get; set; }
         public string? AreaOfExpertise { get; set; } //Skills, kompetences etc.
 
+
+        public List<Article>? Articles { get; set; }
         public override string GetFullString()
         {
             return "Name: " + this.Name + " Age: " + this.Age;
