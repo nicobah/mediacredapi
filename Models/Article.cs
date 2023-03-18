@@ -9,7 +9,6 @@ namespace MediaCred
         public string AuthorID { get; set; }
 
         public string? Publisher { get; set; }
-        public int AuthorId { get; set; }
         public string? Link { get; set; }
 
         public int? InappropriateWords { get; set; }
