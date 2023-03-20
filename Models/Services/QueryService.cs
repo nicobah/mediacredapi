@@ -72,7 +72,7 @@ namespace MediaCred.Models.Services
 
         public async Task<Author?> GetAuthorByID(string id)
         {
-            var query = @"MATCH (aut:Author{ID:$id})
+            var query = @"MATCH (aut:Author{id:$id})
                             RETURN aut";
 
             var results = await ExecuteQuery(query, new { id });
