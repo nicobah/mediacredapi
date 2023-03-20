@@ -59,13 +59,13 @@ namespace MediaCred.Controllers
             {
                 var author = await qs.GetAuthorByID(dto.AuthorId);
                 //List of evaluation for a param, the weight it has, and the description of the eval
-                List<(double, double, string)> results = new List<(double, double, string)>();
+                List<(double, double, string, string)> results = new List<(double, double, string, string)>();
                 foreach (var eval in dto.Evals)
                 {
                     var currentEval = TranslateEvals(eval.Key);
                     if (currentEval != null)
                     {
-                        results.Add((currentEval.GetEvaluation(author).Result, eval.Value, currentEval.Description));
+                        results.Add((currentEval.GetEvaluation(author).Result, eval.Value, currentEval.Description, currentEval.Name));
                     }
                 }
 
@@ -102,13 +102,13 @@ namespace MediaCred.Controllers
                 }
 
                 //List of evaluation for a param, the weight it has, and the description of the eval
-                List<(double, double, string)> results = new List<(double, double, string)>();
+                List<(double, double, string, string)> results = new List<(double, double, string, string)>();
                 foreach (var eval in dto.ArticleEvals)
                 {
                     var currentEval = TranslateEvalsArticle(eval.Key);
                     if (currentEval != null && article != null)
                     {
-                        results.Add((currentEval.GetEvaluation(article).Result, eval.Value, currentEval.Description));
+                        results.Add((currentEval.GetEvaluation(article).Result, eval.Value, currentEval.Description, currentEval.Name));
                     }
                 }
 
