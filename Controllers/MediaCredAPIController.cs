@@ -83,12 +83,30 @@ namespace MediaCred.Controllers
             try
             {
                 var article = await qs.GetArticleByLink(dto.ArticleLink);
+
+                if (dto.AuthorEvals != null && dto.AuthorEvals.Count > 0 && article.Authors != null && article.Authors.Count > 0)
+                {
+                    foreach (var author in article.Authors)
+                    {
+                        var authorCred = 0.0;
+                        foreach (var eval in dto.AuthorEvals)
+                        {
+                            var currentEval = TranslateEvals(eval.Key);
+                            if (currentEval != null)
+                            {
+                                authorCred += currentEval.GetEvaluation(author).Result * (eval.Value/100);
+                            }
+                        }
+                        author.Credibility = authorCred;
+                    }
+                }
+
                 //List of evaluation for a param, the weight it has, and the description of the eval
                 List<(double, double, string)> results = new List<(double, double, string)>();
-                foreach (var eval in dto.Evals)
+                foreach (var eval in dto.ArticleEvals)
                 {
                     var currentEval = TranslateEvalsArticle(eval.Key);
-                    if (currentEval != null)
+                    if (currentEval != null && article != null)
                     {
                         results.Add((currentEval.GetEvaluation(article).Result, eval.Value, currentEval.Description));
                     }
@@ -523,6 +541,8 @@ namespace MediaCred.Controllers
                     return new ArticleRefEvaluation();
                 case "topic":
                     return new ArticleTopicEvaluation();
+                case "author":
+                    return new ArticleAuthorEvaluation();
                 default:
                     return null;
             }

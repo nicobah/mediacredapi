@@ -3,6 +3,8 @@
     public class ArticleEvalDto
     {
         public string ArticleLink { get; set; }
-        public List<KeyValue> Evals { get; set; }
+        public List<KeyValue> ArticleEvals { get; set; }
+
+        public List<KeyValue>? AuthorEvals { get; set; }
     }
 }

@@ -15,6 +15,7 @@ namespace MediaCred
         public string? PoliticalOrientation { get; set; }
         public string? AreaOfExpertise { get; set; } //Skills, kompetences etc.
 
+        public double? Credibility { get; set; }
 
         public List<Article>? Articles { get; set; }
         public override string GetFullString()

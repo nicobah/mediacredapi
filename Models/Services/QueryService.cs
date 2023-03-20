@@ -53,21 +53,58 @@ namespace MediaCred.Models.Services
 
             var results = await ExecuteQuery(query, new { url });
 
+            var queryAuthors = @"MATCH (art:Article{link:$url})-[:WRITTEN_BY]->(aut:Author)
+                            RETURN aut";
+
+            var resultAuthors = await ExecuteQuery(queryAuthors, new { url });
+
+            var queryUsedAsBacking = @"MATCH (art:Article{link:$url})<-[:BACKED_BY]-(c:Claim)
+                            RETURN art";
+
+            var resultUsedAsBacking = await ExecuteQuery(queryUsedAsBacking, new { url });
+
             if (results != null && results.Count > 0)
             {
-                return GetArticleFromResult(results);
+                return GetArticleFromResult(results, resultAuthors, resultUsedAsBacking);
             }
 
             return null;
         }
 
-        private Article? GetArticleFromResult(List<IRecord> results)
+        private Article? GetArticleFromResult(List<IRecord> results, List<IRecord> authorResults, List<IRecord> backingResults)
         {
             var articleNode = results[0].Values.First().Value;
 
             var articlePropsJson = JsonConvert.SerializeObject(articleNode.As<INode>().Properties);
 
-            return JsonConvert.DeserializeObject<Article>(articlePropsJson);
+            var article = JsonConvert.DeserializeObject<Article>(articlePropsJson);
+            
+            if(article != null && authorResults!= null && authorResults.Count > 0)
+                article.Authors = GetAuthorsFromArticleRelationship(authorResults);
+
+            if(article != null && backingResults != null)
+                article.UsedAsBacking = backingResults.Count;
+
+            return article;
+        }
+
+        private List<Author> GetAuthorsFromArticleRelationship(List<IRecord> authorResults)
+        {
+            var authors = new List<Author>();
+
+            foreach (var authorRelation in authorResults)
+            {
+                var authorNode = authorRelation.Values.First().Value;
+
+                var authorPropsJson = JsonConvert.SerializeObject(authorNode.As<INode>().Properties);
+
+                var author = JsonConvert.DeserializeObject<Author>(authorPropsJson);
+
+                if(author!=null)
+                    authors.Add(author);
+            }
+
+            return authors;
         }
 
         public async Task<Author?> GetAuthorByID(string id)

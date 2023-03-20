@@ -19,6 +19,10 @@ namespace MediaCred
 
         public string? Topic { get; set; }
 
+        public List<Author>? Authors { get; set; }
+
+        public int? UsedAsBacking { get; set; }
+
         public override string GetFullString()
         {
             return "Title: " + this.Title + " Publisher: " + this.Publisher + " Link: " + this.Link + " # of inappropriate words: " + this.InappropriateWords + " Credibility: " + this.Credibility;
