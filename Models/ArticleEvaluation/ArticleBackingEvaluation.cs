@@ -1,6 +1,6 @@
 ﻿namespace MediaCred.Models.ArticleEvaluation
 {
-    public class ArticleBackingEvaluation
+    public class ArticleBackingEvaluation : IArticleCredibilityEvaluation
     {
         public string Name { get; set; } = "ArticleUsedAsBacking";
         public string Description { get; set; } = "Evaluates the article based on how many claims use it as backing.";

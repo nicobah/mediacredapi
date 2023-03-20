@@ -543,6 +543,8 @@ namespace MediaCred.Controllers
                     return new ArticleTopicEvaluation();
                 case "author":
                     return new ArticleAuthorEvaluation();
+                case "backings":
+                    return new ArticleBackingEvaluation();
                 default:
                     return null;
             }
