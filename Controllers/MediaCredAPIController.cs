@@ -112,12 +112,28 @@ namespace MediaCred.Controllers
                     }
                 }
 
+                //TO-DO: Store credibility score in histogram DB (see explanation below)
+
                 return JsonConvert.SerializeObject(results);
             }
 
             catch(Exception ex) { }
             
             return "failed";
+        }
+
+        [HttpGet("GetArticleHistogram")]
+        public async Task<string> GetArticleHistogram(string id)
+        {
+            //TO-DO: Create article histogram method to extract histogram data of an articles
+            //credibility scores from each user who accessed it, to see how the current user's score
+            //compares to other user's score. It should probably be extracted from a simple DB holding
+            //doubles, and then put into a dictionary to produce the histogram.
+            //Link for inspiration: https://stackoverflow.com/questions/926067/simple-histogram-generation-of-integer-data-in-c-sharp
+
+            //return GetArticleHistogram(id);
+
+            return "not implemented yet";
         }
 
 
