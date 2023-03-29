@@ -11,6 +11,5 @@
         public double AuthorWeight { get; set; }
         public double BackingsWeight { get; set; }
 
-
     }
 }
