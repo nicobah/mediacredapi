@@ -1,6 +1,7 @@
 ﻿using MediaCred.Controllers;
 using Neo4j.Driver;
 using Newtonsoft.Json;
+using System;
 
 namespace MediaCred.Models.Services
 {
@@ -71,6 +72,32 @@ namespace MediaCred.Models.Services
             return null;
         }
 
+        public async Task<User?> GetUserByID(string id)
+        {
+            var query = @"MATCH (usr:User{ID:$id})
+                            return usr"
+            ;
+
+            var results = await ExecuteQuery(query, new { id });
+
+            return GetUserFromResults(results);
+        }
+
+        private User? GetUserFromResults(List<IRecord> results)
+        {
+            try
+            {
+                var userNode = results[0].Values.First().Value;
+
+                var user = JsonConvert.DeserializeObject<User>(JsonConvert.SerializeObject(userNode.As<INode>().Properties));
+
+                return user;
+            }
+            catch { }
+
+            return null;
+        }
+
         private Article? GetArticleFromResult(List<IRecord> results, List<IRecord> authorResults, List<IRecord> backingResults)
         {
             var articleNode = results[0].Values.First().Value;
@@ -105,6 +132,57 @@ namespace MediaCred.Models.Services
             }
 
             return authors;
+        }
+
+        public async Task<Dictionary<User,double>> GetSubscribers(Article art)
+        {
+            var query = @"MATCH (sub:User)-[score:SUBSCRIBES_TO]->(art:Article)
+                            RETURN sub, score";
+
+            var results = await ExecuteQuery(query);
+
+            return GetUsersAndScoresFromResult(results);
+        }
+
+        public async Task<Dictionary<string, double>> GetSubscribersStringKey(Article art)
+        {
+            var query = @"MATCH (sub:User)-[score:SUBSCRIBES_TO]->(art:Article)
+                            RETURN sub, score";
+
+            var results = await ExecuteQuery(query);
+
+            var dict = GetUsersAndScoresFromResult(results);
+            
+            var newDict = new Dictionary<string, double>();
+
+            foreach(var keyval in dict)
+            {
+                newDict.Add(keyval.Key.Name, keyval.Value);
+            }
+
+            return newDict;
+        }
+
+        private Dictionary<User,double> GetUsersAndScoresFromResult(List<IRecord> results)
+        {
+            var dict = new Dictionary<User,double>();
+
+            foreach(var res in results)
+            {
+                var userNode = res.Values.FirstOrDefault().Value;
+                var scoreRelation = res.Values.LastOrDefault().Value;
+
+                if(userNode !=null && scoreRelation != null)
+                {
+                    var user = JsonConvert.DeserializeObject<User>(JsonConvert.SerializeObject(userNode.As<INode>().Properties));
+                    var score = JsonConvert.DeserializeObject<SubscribesTo>(JsonConvert.SerializeObject(scoreRelation.As<IRelationship>().Properties));
+
+                    if(user != null && score != null)
+                        dict.Add(user, score.Score);
+                }
+            }
+
+            return dict;
         }
 
         public async Task<Author?> GetAuthorByID(string id)

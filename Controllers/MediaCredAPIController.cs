@@ -122,6 +122,19 @@ namespace MediaCred.Controllers
             return "failed";
         }
 
+        [HttpGet("GetSubscribers")]
+        public async Task<Dictionary<string,double>> GetSubscribers(string id)
+        {
+            var art = await qs.GetArticleByLink(id);
+            return await qs.GetSubscribersStringKey(art);
+        }
+
+        [HttpGet("GetUserByID")]
+        public async Task<User> GetUserByID(string id)
+        {
+            return await qs.GetUserByID(id);
+        }
+
         [HttpGet("GetArticleHistogram")]
         public async Task<string> GetArticleHistogram(string id)
         {
