@@ -11,6 +11,7 @@ using Newtonsoft.Json.Linq;
 using MediaCred.Models.ArticleEvaluation;
 using MediaCred.Models.Services;
 using Microsoft.AspNetCore.Mvc.Formatters;
+using System.Xml.Linq;
 
 namespace MediaCred.Controllers
 {
@@ -29,7 +30,7 @@ namespace MediaCred.Controllers
 
         public MediaCredAPIController()
         {
-            qs = new QueryService(_disposed,_logger);
+            qs = new QueryService(_disposed, _logger);
         }
 
         [HttpGet("IsUp")]
@@ -94,7 +95,7 @@ namespace MediaCred.Controllers
                             var currentEval = TranslateEvals(eval.Key);
                             if (currentEval != null)
                             {
-                                authorCred += currentEval.GetEvaluation(author).Result * (eval.Value/100);
+                                authorCred += currentEval.GetEvaluation(author).Result * (eval.Value / 100);
                             }
                         }
                         author.Credibility = authorCred;
@@ -117,13 +118,13 @@ namespace MediaCred.Controllers
                 return JsonConvert.SerializeObject(results);
             }
 
-            catch(Exception ex) { }
-            
+            catch (Exception ex) { }
+
             return "failed";
         }
 
         [HttpGet("GetSubscribers")]
-        public async Task<Dictionary<string,double>> GetSubscribers(string id)
+        public async Task<Dictionary<string, double>> GetSubscribers(string id)
         {
             var art = await qs.GetArticleByLink(id);
             return await qs.GetSubscribersStringKey(art);
@@ -206,7 +207,7 @@ namespace MediaCred.Controllers
         {
             var query = $"MATCH(aut:Author{{id: \"{art.AuthorID}\"}}) ";
             query += GenerateCreateQuery(art, objID: "a") + ", (a)-[:WRITTEN_BY]->(aut)";
-            
+
             await qs.ExecuteQuery(query, new { art.Title, art.AuthorID, art.Publisher, art.Link, art.InappropriateWords, art.References, art.Topic });
         }
 
@@ -230,11 +231,70 @@ namespace MediaCred.Controllers
         }
 
         [HttpPost("CreateBacking")]
-        public async Task CreateBacking([FromQuery] Article article, [FromQuery] Argument argument)
+        public async Task CreateBacking(string artID, [FromQuery] Argument argument)
         {
-            var query = $"MATCH(art:Article{{title: \"{article.Title}\", publisher: \"{article.Publisher}\"}}), (arg:Argument{{claim: \"{argument.Claim}\"}}) CREATE (arg)-[:BACKED_BY]->(art)";
+            var articleOld = await qs.GetArticleByLink(artID);
+            var subscribers = await qs.GetSubscribers(articleOld);
 
-            await qs.ExecuteQuery(query, new { article.Title, article.Publisher, argument.Claim });
+            var queryCreateBacking = $"MATCH(art:Article{{ID: $artID}}), (arg:Argument{{claim: \"{argument.Claim}\"}}) " +
+            $"CREATE (arg)-[:BACKED_BY]->(art)";
+
+            await qs.ExecuteQuery(queryCreateBacking, new { artID, argument.Claim });
+
+            CheckForChangesInCredibilityAndNotify(artID, subscribers);
+        }
+
+        [HttpPost("CreateRebuttal")]
+        public async Task CreateRebuttal(string artID, [FromQuery] Argument argument)
+        {
+            var articleOld = await qs.GetArticleByLink(artID);
+            var subscribers = await qs.GetSubscribers(articleOld);
+
+            var queryCreateRebuttal = $"MATCH(art:Article{{ID: $artID}}), (arg:Argument{{claim: \"{argument.Claim}\"}}) " +
+            $"CREATE (arg)-[:DISPUTED_BY]->(art)";
+
+            await qs.ExecuteQuery(queryCreateRebuttal, new { artID, argument.Claim });
+
+            CheckForChangesInCredibilityAndNotify(artID, subscribers);
+        }
+
+        private async Task CheckForChangesInCredibilityAndNotify(string artID, Dictionary<User, double> oldSubscribersAndScores)
+        {
+            var articleNew = await qs.GetArticleByLink(artID);
+            foreach (var subPair in oldSubscribersAndScores)
+            {
+                var newScore = GetArticleCredibility(articleNew, subPair.Key);
+
+                if (newScore < subPair.Value - 10)
+                {
+                    var es = new EmailService();
+                    es.Send("alextholle@gmail.com",
+                        "An article you follow has decreased in credibility!",
+                        "The article " + articleNew.Title + " has fallen in credibility with more than 10 points. Please review it and check if it is not trustworthy anymore.");
+
+                    //TO-DO: Update the SUBSCRIBES_TO relationships with the new scores.
+                }
+            }
+        }
+
+        private double GetArticleCredibility(Article article, User user)
+        {
+            var articleCred = 0.0;
+            foreach (var author in article.Authors)
+            {
+                var authorEval = new AuthorInformationEvaluation();
+
+                author.Credibility = authorEval.GetEvaluation(author).Result * (user.AuthorWeight / 100); //is this correct???
+            }
+
+            articleCred += new ArticleInformationEvaluation().GetEvaluation(article).Result * user.InformationWeight;
+            articleCred += new ArticleBackingEvaluation().GetEvaluation(article).Result * user.BackingsWeight;
+            articleCred += new ArticleAuthorEvaluation().GetEvaluation(article).Result * user.AuthorWeight;
+            articleCred += new ArticleIWEvaluation().GetEvaluation(article).Result * user.InappropriateWordsWeight;
+            articleCred += new ArticleRefEvaluation().GetEvaluation(article).Result * user.ReferencesWeight;
+            articleCred += new ArticleTopicEvaluation().GetEvaluation(article).Result * user.TopicWeight;
+
+            return articleCred;
         }
 
         //[HttpPost("UpdateArticle")]
@@ -561,6 +621,35 @@ namespace MediaCred.Controllers
             var authorPropsJson = JsonConvert.SerializeObject(authorNode.As<INode>().Properties);
 
             return JsonConvert.DeserializeObject<Author>(authorPropsJson);
+        }
+
+        private double? GetEvalTypeAndWeight(Type type, User user)
+        {
+            if (type == typeof(ArticleInformationEvaluation))
+            {
+                return user.InformationWeight;
+            }
+            else if (type == typeof(ArticleIWEvaluation))
+            {
+                return user.InappropriateWordsWeight;
+            }
+            else if (type == typeof(ArticleRefEvaluation))
+            {
+                return user.ReferencesWeight;
+            }
+            else if (type == typeof(ArticleTopicEvaluation))
+            {
+                return user.TopicWeight;
+            }
+            else if (type == typeof(ArticleAuthorEvaluation))
+            {
+                return user.AuthorWeight;
+            }
+            else if (type == typeof(ArticleBackingEvaluation))
+            {
+                return user.BackingsWeight;
+            }
+            else { return null; }
         }
 
         private IArticleCredibilityEvaluation? TranslateEvalsArticle(string key)

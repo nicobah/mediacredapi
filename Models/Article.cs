@@ -13,7 +13,7 @@ namespace MediaCred
 
         public int? InappropriateWords { get; set; }
 
-        public int? Credibility { get; set; }
+        public double? Credibility { get; set; }
 
         public int? References { get; set; } //Should probably be list of articles?
 
