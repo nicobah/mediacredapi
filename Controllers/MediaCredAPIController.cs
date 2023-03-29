@@ -246,8 +246,6 @@ namespace MediaCred.Controllers
         //    return await ExecuteQuery(query, new { art.Title, art.Publisher, art.Link });
         //}
 
-        
-
         private string GenerateCreateQuery(object obj, Type objtype = null, string objID = "o")
         {
             var sb = new StringBuilder();
