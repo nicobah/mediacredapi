@@ -87,9 +87,8 @@ namespace MediaCred.Models.Services
 
         public async Task<User?> GetUserByID(string id)
         {
-            var query = @"MATCH (usr:User{ID:$id})
-                            return usr"
-            ;
+            var query = @"MATCH (usr:User{ID:$id})-[:SUBSCRIBES_TO]->(art:Article)
+                            return usr, art";
 
             var results = await ExecuteQuery(query, new { id });
 
@@ -103,6 +102,17 @@ namespace MediaCred.Models.Services
                 var userNode = results[0].Values.First().Value;
 
                 var user = JsonConvert.DeserializeObject<User>(JsonConvert.SerializeObject(userNode.As<INode>().Properties));
+                
+                user.SubscribesTo = new List<Article>();
+
+                foreach(var record in results)
+                {
+                    var articleNode = record.Values.Last().Value;
+
+                    var article = JsonConvert.DeserializeObject<Article>(JsonConvert.SerializeObject(articleNode.As<INode>().Properties));
+
+                    user.SubscribesTo.Add(article);
+                }
 
                 return user;
             }
