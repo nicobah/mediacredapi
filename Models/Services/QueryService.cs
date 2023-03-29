@@ -18,25 +18,6 @@ namespace MediaCred.Models.Services
             _disposed = disposed;
             _driver = GraphDatabase.Driver("neo4j+s://64d3b06c.databases.neo4j.io", AuthTokens.Basic("neo4j", "k7by2DDGbQvb98r5geSqJMLf1TRBlL_EWeGHqhrxn8M")); ;
             _logger = logger;
-
-            var session = _driver.AsyncSession();
-            session.RunAsync("CALL apoc.trigger.add('myTrigger', 'UNWIND $createdNodes AS node MATCH (u:User) WHERE u.name = node.name SET u.created = timestamp()')");
-            session.RegisterOnCompleted((s) =>
-            {
-                Console.WriteLine("Trigger registered");
-            });
-
-            var watcher = session.Watch("myTrigger");
-            watcher.Subscribe(record =>
-            {
-                Console.WriteLine($"Trigger {record["name"]} fired");
-            });
-
-
-            //When finished with the session:
-            session.CloseAsync();
-            _driver.CloseAsync();
-
         }
 
         public QueryService()

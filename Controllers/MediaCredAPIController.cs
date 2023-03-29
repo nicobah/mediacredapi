@@ -194,6 +194,13 @@ namespace MediaCred.Controllers
 
         }
 
+        [HttpPost("SendEmail")]
+        public async Task SendEmail(string toEmail, string subject, string body)
+        {
+            var es = new EmailService();
+            es.Send(toEmail, subject, body);
+        }
+
         [HttpPost("CreateArticle")]
         public async Task CreateArticle(Article art)
         {
