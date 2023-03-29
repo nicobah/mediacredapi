@@ -1,6 +1,7 @@
 ﻿using MediaCred.Controllers;
 using Neo4j.Driver;
 using Newtonsoft.Json;
+using System.Text;
 
 namespace MediaCred.Models.Services
 {
@@ -46,6 +47,18 @@ namespace MediaCred.Models.Services
             }
         }
 
+        public async Task<User?> CreateUser()
+        {
+            var u = new User();
+            u.ID = Guid.NewGuid().ToString();
+
+            var query = GenerateCreateQuery(u, objtype: typeof(User));
+
+            var result = await ExecuteQuery(query);
+            return GetUserFromResult(result);
+            
+        }
+
         public async Task<Article?> GetArticleByLink(string url)
         {
             var query = @"MATCH (art:Article{link:$url})
@@ -87,6 +100,17 @@ namespace MediaCred.Models.Services
 
             return article;
         }
+        private User? GetUserFromResult(List<IRecord> results)
+        {
+            var userNode = results[0].Values.First().Value;
+
+            var userProps = JsonConvert.SerializeObject(userNode.As<INode>().Properties);
+
+            var user = JsonConvert.DeserializeObject<User>(userProps);
+
+            return user;
+        }
+
 
         private List<Author> GetAuthorsFromArticleRelationship(List<IRecord> authorResults)
         {
@@ -129,6 +153,42 @@ namespace MediaCred.Models.Services
             var authorPropsJson = JsonConvert.SerializeObject(authorNode.As<INode>().Properties);
 
             return JsonConvert.DeserializeObject<Author>(authorPropsJson);
+        }
+
+        private string GenerateCreateQuery(object obj, Type objtype = null, string objID = "o")
+        {
+            var sb = new StringBuilder();
+            try
+            {
+                if (objtype == null)
+                    objtype = obj.GetType();
+
+                sb.Append("CREATE (" + objID + ":" + objtype.Name + " { ");
+                sb.Append(GeneratePropertiesString(obj, false, ':', objID));
+                sb.Append("})");
+            }
+            catch (Exception ex) { }
+
+            return sb.ToString();
+        }
+
+        private string GeneratePropertiesString(object obj, bool isUpdate, char equalColon, string identifier = "o")
+        {
+            var sb = new StringBuilder();
+            var properties = obj.GetType().GetProperties();
+            for (int i = 0; i < properties.Length; i++)
+            {
+                var prop = properties[i];
+                if (prop.GetValue(obj) != null && prop.GetValue(obj).ToString().Length > 0)
+                {
+                    if (i != 0)
+                        sb.Append(", ");
+                    if (isUpdate)
+                        sb.Append(identifier + ".");
+                    sb.Append(prop.Name.ToLower() + equalColon + " \"" + prop.GetValue(obj) + "\"");
+                }
+            }
+            return sb.ToString().Trim();
         }
     }
 }
