@@ -249,21 +249,11 @@ namespace MediaCred.Controllers
         [HttpPost("CreateRebuttal")]
         public async Task CreateRebuttal(string artID, string argID, string claimArtID)
         {
-            var articleOld = await qs.GetArticleByLink(artID);
             var claimArticleOld = await qs.GetArticleByLink(claimArtID);
-            var subscribers = await qs.GetSubscribers(articleOld);
+            var subscribers = await qs.GetSubscribers(claimArticleOld);
 
             //toulmin old results
-            var queryOld = $"MATCH (art:Article)-[r]->(b:Argument{{claim: \"{argID}\"}}), (b)-[rTwo]->(a:Article) RETURN art, r, b, rTwo, a";
-
-            var resultsOld = await qs.ExecuteQuery(queryOld, new { argID });
-
-            if (resultsOld.Count == 0)
-            {
-                queryOld = $"MATCH (art:Article)-[r]->(b:Argument{{claim: \"{argID}\"}}) RETURN art, r, b";
-
-                resultsOld = await qs.ExecuteQuery(queryOld, new { argID });
-            }
+            var resultsOld = await GetToulminResultsForArgument(argID);
 
             var queryCreateRebuttal = $"MATCH(art:Article{{link: \"{artID}\"}}), (arg:Argument{{claim: \"{argID}\"}}) " +
             $"CREATE (arg)-[:DISPUTED_BY]->(art)";
@@ -276,34 +266,48 @@ namespace MediaCred.Controllers
             await CheckForChangesInCredibilityAndNotify(claimArtID, subscribers);
         }
 
-        private async Task CheckForChangesInToulmin(List<IRecord> oldArgResults, Argument newArg, Dictionary<User, double> subscribers)
+        private async Task<List<IRecord>> GetToulminResultsForArgument(string argID)
         {
-            var queryNew = $"MATCH (art:Article)-[r]->(b:Argument{{claim: \"{newArg.Claim}\"}}), (b)-[rTwo]->(a:Article) RETURN art, r, b, rTwo, a";
+            var query = $"MATCH (art:Article)-[r]->(b:Argument{{claim: \"{argID}\"}}), (b)-[rTwo]->(a:Article) RETURN art, r, b, rTwo, a";
 
-            var resultsNew = await qs.ExecuteQuery(queryNew, new { newArg.Claim });
+            var results = await qs.ExecuteQuery(query, new { argID });
 
-            if (resultsNew.Count == 0)
+            if (results.Count == 0)
             {
-                queryNew = $"MATCH (art:Article)-[r]->(b:Argument{{claim: \"{ newArg.Claim}\"}}) RETURN art, r, b";
+                query = $"MATCH (art:Article)-[r]->(b:Argument{{claim: \"{argID}\"}}) RETURN art, r, b";
 
-                resultsNew = await qs.ExecuteQuery(queryNew, new { newArg.Claim });
+                results = await qs.ExecuteQuery(query, new { argID });
             }
 
-            var toulminStringOld = await GetToulminString(oldArgResults);
-            var toulminStringNew = await GetToulminString(resultsNew);
+            return results;
+        }
 
-            var oldToulminScore = GetToulminScore(toulminStringOld);
-            var newToulminScore = GetToulminScore(toulminStringNew);
-
-            if(newToulminScore < oldToulminScore)
+        private async Task CheckForChangesInToulmin(List<IRecord> oldArgResults, Argument newArg, Dictionary<User, double> subscribers)
+        {
+            try
             {
-                foreach(var sub in subscribers)
+                var resultsNew = await GetToulminResultsForArgument(newArg.Claim);
+
+                var toulminStringOld = await GetToulminString(oldArgResults);
+                var toulminStringNew = await GetToulminString(resultsNew);
+
+                var oldToulminScore = GetToulminScore(toulminStringOld);
+                var newToulminScore = GetToulminScore(toulminStringNew);
+
+                if (newToulminScore < oldToulminScore)
                 {
-                    var es = new EmailService();
-                    es.Send("alextholle@gmail.com",
-                        "A claim from an article you follow has decreased in credibility!",
-                        "Hi " + sub.Key.Name+ "! The claim: \"" + newArg.Claim + "\" has fallen in credibility. Please review the claim/article and check if it is not trustworthy anymore.");
+                    foreach (var sub in subscribers)
+                    {
+                        var es = new EmailService();
+                        es.Send("alextholle@gmail.com",
+                            "A claim from an article you follow has decreased in credibility!",
+                            "Hi " + sub.Key.Name + "! The claim: \"" + newArg.Claim + "\" has fallen in credibility. Please review the claim/article and check if it is not trustworthy anymore.");
+                    }
                 }
+            }
+            catch(Exception ex)
+            {
+                //Missing arguments or something like that error
             }
         }
 
