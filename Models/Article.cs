@@ -4,6 +4,8 @@ namespace MediaCred
 {
     public class Article : Node
     {
+        public string ID { get; set; }
+
         public string Title { get; set; }
 
         public string AuthorID { get; set; }

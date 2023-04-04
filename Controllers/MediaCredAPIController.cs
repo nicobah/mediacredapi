@@ -207,10 +207,12 @@ namespace MediaCred.Controllers
         [HttpPost("CreateArticle")]
         public async Task CreateArticle(Article art)
         {
+            art.ID = Guid.NewGuid().ToString();
+
             var query = $"MATCH(aut:Author{{id: \"{art.AuthorID}\"}}) ";
             query += GenerateCreateQuery(art, objID: "a") + ", (a)-[:WRITTEN_BY]->(aut)";
 
-            await qs.ExecuteQuery(query, new { art.Title, art.AuthorID, art.Publisher, art.Link, art.InappropriateWords, art.References, art.Topic });
+            await qs.ExecuteQuery(query, new { art.ID, art.Title, art.AuthorID, art.Publisher, art.Link, art.InappropriateWords, art.References, art.Topic });
         }
 
         [HttpPost("CreateAuthor")]
@@ -224,10 +226,12 @@ namespace MediaCred.Controllers
         }
 
         [HttpPost("CreateArgument")]
-        public async Task CreateArgument(string artID, [FromQuery] Argument argument)
+        public async Task CreateArgument(string artID, [FromQuery] ArgumentDto argument)
         {
-            var query = $"MATCH(art:Article{{link: \"{artID}\"}}) ";
-            query += GenerateCreateQuery(argument, objID: "arg") + ", (art)-[:CLAIMS]->(arg)";
+            argument.ID = Guid.NewGuid().ToString();
+
+            var query = $"MATCH(art:Article{{id: \"{artID}\"}}) ";
+            query += GenerateCreateQuery(argument, objtype: typeof(Argument), objID: "arg") + ", (art)-[:CLAIMS]->(arg)";
 
             await qs.ExecuteQuery(query, new { artID, argument.Claim, argument.Ground, argument.Warrant });
         }
@@ -238,7 +242,7 @@ namespace MediaCred.Controllers
             var articleOld = await qs.GetArticleByLink(artID);
             var subscribers = await qs.GetSubscribers(articleOld);
 
-            var queryCreateBacking = $"MATCH(art:Article{{link: $artID}}), (arg:Argument{{claim: \"{argID}\"}}) " +
+            var queryCreateBacking = $"MATCH(art:Article{{id: $artID}}), (arg:Argument{{claim: \"{argID}\"}}) " +
             $"CREATE (arg)-[:BACKED_BY]->(art)";
 
             await qs.ExecuteQuery(queryCreateBacking, new { artID, argID });
@@ -255,7 +259,7 @@ namespace MediaCred.Controllers
             //toulmin old results
             var resultsOld = await GetToulminResultsForArgument(argID);
 
-            var queryCreateRebuttal = $"MATCH(art:Article{{link: \"{artID}\"}}), (arg:Argument{{claim: \"{argID}\"}}) " +
+            var queryCreateRebuttal = $"MATCH(art:Article{{id: \"{artID}\"}}), (arg:Argument{{claim: \"{argID}\"}}) " +
             $"CREATE (arg)-[:DISPUTED_BY]->(art)";
 
             var res = await qs.ExecuteQuery(queryCreateRebuttal, new { artID, argID });
@@ -343,7 +347,7 @@ namespace MediaCred.Controllers
 
                     //TO-DO: Update the SUBSCRIBES_TO relationships with the new scores.
                     var usrID = subPair.Key.ID;
-                    var query = $"MATCH(usr:User{{ID:\"$usrID\"}})-[score:SUBSCRIBES_TO]->(art:Article{{link:\"$artID\"}})" +
+                    var query = $"MATCH(usr:User{{id:\"$usrID\"}})-[score:SUBSCRIBES_TO]->(art:Article{{id:\"$artID\"}})" +
                         $"SET score.score = $newScore";
                     await qs.ExecuteQuery(query, new { usrID, artID, newScore });
                 }
@@ -370,14 +374,35 @@ namespace MediaCred.Controllers
             return articleCred;
         }
 
-        //[HttpPost("UpdateArticle")]
-        //public async Task<Node> UpdateArticle([FromQuery] Article art, [FromQuery] Article newArticle)
-        //{
-        //    //TODO: Make the two incoming nodes to a wrapper class, else it wont work.
-        //    var query = GenerateUpdateQuery(art, newArticle);
+        [HttpPost("UpdateArticle")]
+        public async Task<string> UpdateArticle(string artID, [FromQuery] ArticleDto newArticle)
+        {
+            var query = GenerateUpdateQuery(artID, newArticle, objtype: typeof(Article));
 
-        //    return await ExecuteQuery(query, new { art.Title, art.Publisher, art.Link });
-        //}
+            var results = await qs.ExecuteQuery(query, new { artID });
+
+            return query;
+        }
+
+        [HttpPost("UpdateArgument")]
+        public async Task<string> UpdateArgument(string argID, [FromQuery] ArgumentDto updatedArg)
+        {
+            var query = GenerateUpdateQuery(argID, updatedArg, objtype: typeof(Argument));
+
+            var results = await qs.ExecuteQuery(query, new { argID });
+
+            return query;
+        }
+
+        [HttpPost("UpdateAuthor")]
+        public async Task<string> UpdateAuthor(string authorID, [FromQuery] AuthorApiDto updatedAuthor)
+        {
+            var query = GenerateUpdateQuery(authorID, updatedAuthor, objtype: typeof(Author));
+
+            var results = await qs.ExecuteQuery(query, new { authorID });
+
+            return query;
+        }
 
         private string GenerateCreateQuery(object obj, Type objtype = null, string objID = "o")
         {
@@ -396,14 +421,18 @@ namespace MediaCred.Controllers
             return sb.ToString();
         }
 
-        private string GenerateUpdateQuery(object obj, object updateObj)
+        private string GenerateUpdateQuery(string objID, object updateObj, Type objtype = null)
         {
             var sb = new StringBuilder();
             try
             {
+                if (objtype == null)
+                    objtype = updateObj.GetType();
+
                 var identifier = "o";
-                sb.Append("MATCH (" + identifier + ":" + obj.GetType().Name + " { ");
-                sb.Append(GeneratePropertiesString(obj, false, ':') + "}) ");
+                //TO-DO: Link should be changed to ID, and all our nodes should have an ID label.
+                sb.Append("MATCH (" + identifier + ":" + objtype.Name + " { id: \"" + objID + "\"}) ");
+                //sb.Append(GeneratePropertiesString(obj, false, ':') + "}) ");
                 sb.Append("SET " + GeneratePropertiesString(updateObj, true, '=', identifier));
             }
             catch (Exception ex) { }
@@ -415,16 +444,18 @@ namespace MediaCred.Controllers
         {
             var sb = new StringBuilder();
             var properties = obj.GetType().GetProperties();
+            var addedCount = 0;
             for (int i = 0; i < properties.Length; i++)
             {
                 var prop = properties[i];
                 if (prop.GetValue(obj) != null && prop.GetValue(obj).ToString().Length > 0)
                 {
-                    if (i != 0)
+                    if (addedCount != 0)
                         sb.Append(", ");
                     if (isUpdate)
                         sb.Append(identifier + ".");
                     sb.Append(prop.Name.ToLower() + equalColon + " \"" + prop.GetValue(obj) + "\"");
+                    addedCount++;
                 }
             }
             return sb.ToString().Trim();
