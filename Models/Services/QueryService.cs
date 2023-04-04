@@ -73,14 +73,19 @@ namespace MediaCred.Models.Services
 
             var resultAuthors = await ExecuteQuery(queryAuthors, new { url });
 
-            var queryUsedAsBacking = @"MATCH (art:Article{link:$url})<-[:BACKED_BY]-(c:Claim)
+            var queryUsedAsBacking = @"MATCH (art:Article{link:$url})<-[:BACKED_BY]-(arg:Argument)
                             RETURN art";
 
             var resultUsedAsBacking = await ExecuteQuery(queryUsedAsBacking, new { url });
 
+            var queryArguments = @"MATCH (art:Article{link:$url})-[:CLAIMS]->(arg:Argument)
+                            RETURN arg";
+
+            var resultArguments = await ExecuteQuery(queryArguments, new { url });
+
             if (results != null && results.Count > 0)
             {
-                return GetArticleFromResult(results, resultAuthors, resultUsedAsBacking);
+                return GetArticleFromResult(results, resultAuthors, resultUsedAsBacking, resultArguments);
             }
 
             return null;
@@ -122,13 +127,16 @@ namespace MediaCred.Models.Services
             return null;
         }
 
-        private Article? GetArticleFromResult(List<IRecord> results, List<IRecord> authorResults, List<IRecord> backingResults)
+        private Article? GetArticleFromResult(List<IRecord> results, List<IRecord> authorResults, List<IRecord> backingResults, List<IRecord> arguments)
         {
             var articleNode = results[0].Values.First().Value;
 
             var articlePropsJson = JsonConvert.SerializeObject(articleNode.As<INode>().Properties);
 
             var article = JsonConvert.DeserializeObject<Article>(articlePropsJson);
+
+            if(article != null && arguments != null && arguments.Count > 0)
+                article.Arguments = GetArgumentsFromResult(arguments);
             
             if(article != null && authorResults!= null && authorResults.Count > 0)
                 article.Authors = GetAuthorsFromArticleRelationship(authorResults);
@@ -138,6 +146,26 @@ namespace MediaCred.Models.Services
 
             return article;
         }
+
+        private List<Argument> GetArgumentsFromResult(List<IRecord> arguments)
+        {
+            var argumentsList = new List<Argument>();
+
+            foreach(var arg in arguments)
+            {
+                var argNode = arg.Values.First().Value;
+
+                var argPropsJson = JsonConvert.SerializeObject(argNode.As<INode>().Properties);
+
+                var argument = JsonConvert.DeserializeObject<Argument>(argPropsJson);
+
+                if(argument != null)
+                    argumentsList.Add(argument);
+            }
+
+            return argumentsList;
+        }
+
         private User? GetUserFromResult(List<IRecord> results)
         {
             var userNode = results[0].Values.First().Value;

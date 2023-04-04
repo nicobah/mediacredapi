@@ -12,6 +12,8 @@ using MediaCred.Models.ArticleEvaluation;
 using MediaCred.Models.Services;
 using Microsoft.AspNetCore.Mvc.Formatters;
 using System.Xml.Linq;
+using Microsoft.AspNetCore.Http;
+using Neo4jClient.Cypher;
 
 namespace MediaCred.Controllers
 {
@@ -222,40 +224,103 @@ namespace MediaCred.Controllers
         }
 
         [HttpPost("CreateArgument")]
-        public async Task CreateArgument([FromQuery] Article article, [FromQuery] Argument argument)
+        public async Task CreateArgument(string artID, [FromQuery] Argument argument)
         {
-            var query = $"MATCH(art:Article{{title: \"{article.Title}\", publisher: \"{article.Publisher}\"}}) ";
+            var query = $"MATCH(art:Article{{link: \"{artID}\"}}) ";
             query += GenerateCreateQuery(argument, objID: "arg") + ", (art)-[:CLAIMS]->(arg)";
 
-            await qs.ExecuteQuery(query, new { article.Title, article.Publisher, argument.Claim, argument.Ground, argument.Warrant });
+            await qs.ExecuteQuery(query, new { artID, argument.Claim, argument.Ground, argument.Warrant });
         }
 
         [HttpPost("CreateBacking")]
-        public async Task CreateBacking(string artID, [FromQuery] Argument argument)
+        public async Task CreateBacking(string artID, string argID)
         {
             var articleOld = await qs.GetArticleByLink(artID);
             var subscribers = await qs.GetSubscribers(articleOld);
 
-            var queryCreateBacking = $"MATCH(art:Article{{ID: $artID}}), (arg:Argument{{claim: \"{argument.Claim}\"}}) " +
+            var queryCreateBacking = $"MATCH(art:Article{{link: $artID}}), (arg:Argument{{claim: \"{argID}\"}}) " +
             $"CREATE (arg)-[:BACKED_BY]->(art)";
 
-            await qs.ExecuteQuery(queryCreateBacking, new { artID, argument.Claim });
+            await qs.ExecuteQuery(queryCreateBacking, new { artID, argID });
 
             CheckForChangesInCredibilityAndNotify(artID, subscribers);
         }
 
         [HttpPost("CreateRebuttal")]
-        public async Task CreateRebuttal(string artID, [FromQuery] Argument argument)
+        public async Task CreateRebuttal(string artID, string argID, string claimArtID)
         {
             var articleOld = await qs.GetArticleByLink(artID);
+            var claimArticleOld = await qs.GetArticleByLink(claimArtID);
             var subscribers = await qs.GetSubscribers(articleOld);
 
-            var queryCreateRebuttal = $"MATCH(art:Article{{ID: $artID}}), (arg:Argument{{claim: \"{argument.Claim}\"}}) " +
+            //toulmin old results
+            var queryOld = $"MATCH (art:Article)-[r]->(b:Argument{{claim: \"{argID}\"}}), (b)-[rTwo]->(a:Article) RETURN art, r, b, rTwo, a";
+
+            var resultsOld = await qs.ExecuteQuery(queryOld, new { argID });
+
+            if (resultsOld.Count == 0)
+            {
+                queryOld = $"MATCH (art:Article)-[r]->(b:Argument{{claim: \"{argID}\"}}) RETURN art, r, b";
+
+                resultsOld = await qs.ExecuteQuery(queryOld, new { argID });
+            }
+
+            var queryCreateRebuttal = $"MATCH(art:Article{{link: \"{artID}\"}}), (arg:Argument{{claim: \"{argID}\"}}) " +
             $"CREATE (arg)-[:DISPUTED_BY]->(art)";
 
-            await qs.ExecuteQuery(queryCreateRebuttal, new { artID, argument.Claim });
+            var res = await qs.ExecuteQuery(queryCreateRebuttal, new { artID, argID });
 
-            CheckForChangesInCredibilityAndNotify(artID, subscribers);
+            var articleNew = await qs.GetArticleByLink(artID);
+            var claimArticleNew = await qs.GetArticleByLink(claimArtID);
+            await CheckForChangesInToulmin(resultsOld, claimArticleNew.Arguments.Where(x => x.Claim == argID).FirstOrDefault(), subscribers);
+            await CheckForChangesInCredibilityAndNotify(claimArtID, subscribers);
+        }
+
+        private async Task CheckForChangesInToulmin(List<IRecord> oldArgResults, Argument newArg, Dictionary<User, double> subscribers)
+        {
+            var queryNew = $"MATCH (art:Article)-[r]->(b:Argument{{claim: \"{newArg.Claim}\"}}), (b)-[rTwo]->(a:Article) RETURN art, r, b, rTwo, a";
+
+            var resultsNew = await qs.ExecuteQuery(queryNew, new { newArg.Claim });
+
+            if (resultsNew.Count == 0)
+            {
+                queryNew = $"MATCH (art:Article)-[r]->(b:Argument{{claim: \"{ newArg.Claim}\"}}) RETURN art, r, b";
+
+                resultsNew = await qs.ExecuteQuery(queryNew, new { newArg.Claim });
+            }
+
+            var toulminStringOld = await GetToulminString(oldArgResults);
+            var toulminStringNew = await GetToulminString(resultsNew);
+
+            var oldToulminScore = GetToulminScore(toulminStringOld);
+            var newToulminScore = GetToulminScore(toulminStringNew);
+
+            if(newToulminScore < oldToulminScore)
+            {
+                foreach(var sub in subscribers)
+                {
+                    var es = new EmailService();
+                    es.Send("alextholle@gmail.com",
+                        "A claim from an article you follow has decreased in credibility!",
+                        "Hi " + sub.Key.Name+ "! The claim: \"" + newArg.Claim + "\" has fallen in credibility. Please review the claim/article and check if it is not trustworthy anymore.");
+                }
+            }
+        }
+
+        private int GetToulminScore(string fit)
+        {
+            switch (fit)
+            {
+                case "weak fit":
+                    return 1;
+                case "normal fit":
+                    return 2;
+                case "good fit":
+                    return 3;
+                case "bad fit":
+                    return 0;
+                default: return 0;
+            }
         }
 
         private async Task CheckForChangesInCredibilityAndNotify(string artID, Dictionary<User, double> oldSubscribersAndScores)
@@ -273,6 +338,10 @@ namespace MediaCred.Controllers
                         "The article " + articleNew.Title + " has fallen in credibility with more than 10 points. Please review it and check if it is not trustworthy anymore.");
 
                     //TO-DO: Update the SUBSCRIBES_TO relationships with the new scores.
+                    var usrID = subPair.Key.ID;
+                    var query = $"MATCH(usr:User{{ID:\"$usrID\"}})-[score:SUBSCRIBES_TO]->(art:Article{{link:\"$artID\"}})" +
+                        $"SET score.score = $newScore";
+                    await qs.ExecuteQuery(query, new { usrID, artID, newScore });
                 }
             }
         }
@@ -363,10 +432,10 @@ namespace MediaCred.Controllers
             {
                 if (resultRecords.Any())
                 {
-                    var backingScore = 0;
+                    var backingScore = 0.0;
                     var backingCount = 0;
 
-                    var rebutScore = 0;
+                    var rebutScore = 0.0;
                     var rebuttalCount = 0;
 
                     foreach (var record in resultRecords)
