@@ -250,6 +250,19 @@ namespace MediaCred.Controllers
             CheckForChangesInCredibilityAndNotify(artID, subscribers);
         }
 
+        [HttpPost("AddArticleReadToUser")]
+        public async Task<string> AddArticleReadToUser(string articleId, string userId)
+        {
+           
+                var query = GenerateAppendQuery(userId, "articlesRead", "testArticleName", objtype: typeof(User));
+
+                var results = await qs.ExecuteQuery(query, new { userId });
+
+                return query;
+
+            }
+   
+
         [HttpPost("CreateRebuttal")]
         public async Task CreateRebuttal(string artID, string argID, string claimArtID)
         {
@@ -439,6 +452,25 @@ namespace MediaCred.Controllers
 
             return sb.ToString();
         }
+        private string GenerateAppendQuery(string objID,  string arrayName, string insertObject, Type objtype = null)
+        {
+            var sb = new StringBuilder();
+            try
+            {
+                if (objtype == null)
+                    objtype = User.GetType();
+
+                var identifier = "o";
+                //TO-DO: Link should be changed to ID, and all our nodes should have an ID label.
+                sb.Append("MATCH (" + identifier + ":" + objtype.Name + " { id: \"" + objID + "\"}) ");
+                //sb.Append(GeneratePropertiesString(obj, false, ':') + "}) ");
+                sb.Append($"SET {identifier}.{arrayName}={identifier}.{arrayName}+ '{insertObject}' ");
+            }
+            catch (Exception ex) { }
+
+            return sb.ToString();
+        }
+
 
         private string GeneratePropertiesString(object obj, bool isUpdate, char equalColon, string identifier = "o")
         {

@@ -5,6 +5,7 @@
         public string ID { get; set; }
         public string Name { get; set; }
         public List<Article>? SubscribesTo { get; set; }
+        public List<string>? ReadArticleIds { get; set; }
         public double NotificationThreshold { get; set; } = 1;
         public double InformationWeight { get; set; } = 1;
         public double InappropriateWordsWeight { get; set; } = 1;
