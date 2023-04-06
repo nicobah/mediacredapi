@@ -14,6 +14,7 @@ namespace MediaCred
         public string? Link { get; set; }
 
         public int? InappropriateWords { get; set; }
+        public string? PoliticalBias { get; set; }
 
         public double? Credibility { get; set; }
 

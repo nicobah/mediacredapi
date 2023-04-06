@@ -14,6 +14,7 @@ using Microsoft.AspNetCore.Mvc.Formatters;
 using System.Xml.Linq;
 using Microsoft.AspNetCore.Http;
 using Neo4jClient.Cypher;
+using Xunit.Sdk;
 
 namespace MediaCred.Controllers
 {
@@ -137,6 +138,30 @@ namespace MediaCred.Controllers
         {
             return await qs.GetUserByID(id);
         }
+        [HttpGet("GetNudge")]
+        public async Task<(bool, Article)> GetNudge(string id)
+        {
+            User user = await GetUserByID(id);
+            //Check if nudge time has been exceeded
+            if (user.NextNudge < DateTime.Now)
+            {
+                //TODO
+                //SET next nudge datetime
+
+
+                //Get the last article read with a topic
+                var topic = await user.GetLatestTopic(qs);
+
+                //Query Database for similar topics and opposite politicalBias
+                var article = await qs.GetArticleByTopicAndBias(topic, user.GetOppositeBias());
+                //send true, and article
+                return (true, article);
+            }
+            else
+                return (false, null);
+          
+        }
+
 
         [HttpGet("GetArticleHistogram")]
         public async Task<string> GetArticleHistogram(string id)
@@ -221,6 +246,18 @@ namespace MediaCred.Controllers
             author.ID = Guid.NewGuid().ToString();
 
             var query = GenerateCreateQuery(author, objtype: typeof(Author));
+
+            await qs.ExecuteQuery(query);
+        }
+
+        [HttpPost("CreateUser")]
+        public async Task CreateUser(string name)
+        {
+            var user = new User() { Name = name, NextNudge = DateTime.Now.AddDays(7)};
+
+            user.ID = Guid.NewGuid().ToString();
+
+            var query = GenerateCreateQuery(user, objtype: typeof(User));
 
             await qs.ExecuteQuery(query);
         }

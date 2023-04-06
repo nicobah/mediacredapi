@@ -88,7 +88,29 @@ namespace MediaCred.Models.Services
                 return GetArticleFromResult(results, resultAuthors, resultUsedAsBacking, resultArguments);
             }
 
+
             return null;
+        }
+        public async Task<Article?> GetArticleById(string id)
+        {
+            var query = @"MATCH (art:Article{id:7})
+                            RETURN art";
+
+            var results = await ExecuteQuery(query, new { id });
+
+
+            if (results != null && results.Count > 0)
+            {
+                return GetArticleFromResult(results, null, null, null);
+            }
+
+            return null;
+        }
+        public async Task<Article> GetArticleByTopicAndBias(string topic, string bias)
+        {
+            var query = $"match(art:Article) where art.politicalBias = \"left\" and art.topic = \"Astrology\" return art";
+            var results = await ExecuteQuery(query, null);
+            return GetArticleFromResult(results, null, null, null);
         }
 
         public async Task<User?> GetUserByID(string id)
