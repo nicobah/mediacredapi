@@ -230,15 +230,23 @@ namespace MediaCred.Controllers
         }
 
         [HttpPost("CreateEvidence")]
-        public async Task CreateEvidence(string artID, EvidenceDto evidence)
+        public async Task CreateEvidence(string artID, Evidence evidence)
         {
-            var evidenceID = Guid.NewGuid().ToString();
+            evidence.ID = Guid.NewGuid().ToString();
 
             var query = $"MATCH(art:Article{{id: \"{artID}\"}}) ";
             query += GenerateCreateQuery(evidence, objtype: typeof(Evidence), objID: "a") + ", (art)-[:PROVES]->(a)";
 
+            await qs.ExecuteQuery(query);
+        }
+        [HttpDelete("DeleteEvidence")]
+        public async Task DeleteEvidence(string evidenceID)
+        {
+
+            var query = $"MATCH(e:Evidence{{id: \"{evidenceID}\"}}) DETACH DELETE e";
             await qs.ExecuteQuery(query, new { });
         }
+
 
         [HttpPost("CreateArticle")]
         public async Task CreateArticle(Article art)

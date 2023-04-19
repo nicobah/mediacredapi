@@ -1,8 +1,11 @@
-﻿namespace MediaCred.Models
+﻿using Swashbuckle.AspNetCore.Annotations;
+
+namespace MediaCred.Models
 {
     public class Evidence
     {
-        public string ID { get; set; }
+        [SwaggerSchema(ReadOnly = true)]
+        public string? ID { get; set; }
 
         public string Name { get; set; }
     }
