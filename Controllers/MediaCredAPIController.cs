@@ -139,7 +139,7 @@ namespace MediaCred.Controllers
             return await qs.GetUserByID(id);
         }
         [HttpGet("GetNudge")]
-        public async Task<(bool, Article)> GetNudge(string id)
+        public async Task<string> GetNudge(string id)
         {
             User user = await GetUserByID(id);
             //Check if nudge time has been exceeded
@@ -155,10 +155,10 @@ namespace MediaCred.Controllers
                 //Query Database for similar topics and opposite politicalBias
                 var article = await qs.GetArticleByTopicAndBias(topic, user.GetOppositeBias());
                 //send true, and article
-                return (true, article);
+                return JsonConvert.SerializeObject(article);
             }
             else
-                return (false, null);
+                return null;
           
         }
 
