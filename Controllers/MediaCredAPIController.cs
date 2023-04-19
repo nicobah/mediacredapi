@@ -229,6 +229,17 @@ namespace MediaCred.Controllers
             es.Send(toEmail, subject, body);
         }
 
+        [HttpPost("CreateEvidence")]
+        public async Task CreateEvidence(string artID, EvidenceDto evidence)
+        {
+            var evidenceID = Guid.NewGuid().ToString();
+
+            var query = $"MATCH(art:Article{{id: \"{artID}\"}}) ";
+            query += GenerateCreateQuery(evidence, objtype: typeof(Evidence), objID: "a") + ", (art)-[:PROVES]->(a)";
+
+            await qs.ExecuteQuery(query, new { });
+        }
+
         [HttpPost("CreateArticle")]
         public async Task CreateArticle(Article art)
         {
