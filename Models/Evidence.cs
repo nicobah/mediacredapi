@@ -2,11 +2,8 @@
 
 namespace MediaCred.Models
 {
-    public class Evidence
+    public class Evidence : Node
     {
-        [SwaggerSchema(ReadOnly = true)]
-        public string? ID { get; set; }
-
         public string Name { get; set; }
     }
 }

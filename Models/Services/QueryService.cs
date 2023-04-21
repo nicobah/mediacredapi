@@ -106,6 +106,37 @@ namespace MediaCred.Models.Services
 
             return null;
         }
+        public async Task<bool> IsBackingValid(string ID)
+        {
+            
+            var query = @"match(arg:Argument{id:$ID}) return arg";
+            var results = await ExecuteQuery(query, new { ID });
+            var arg = GetArgumentsFromResult(results);
+            if(arg.Count < 1)
+            {
+                return true;
+            }
+            else
+            {
+                return arg.FirstOrDefault().IsValid;
+            }
+
+        }
+        public async Task<bool> IsAllBackingsValid(string ID)
+        {
+            var query = @"match (n:Article{id:$ID})-[BACKED_BY]-(b)  return b";
+            var results = await ExecuteQuery(query, new { ID });
+            var arg = GetArgumentsFromResult(results);
+            if (arg.Any(x => !x.IsValid))
+            {
+                return false;
+            }
+            return true;
+
+        }
+
+
+
         public async Task<Article> GetArticleByTopicAndBias(string topic, string bias)
         {
             var query = $"match(art:Article) where art.politicalBias = \"left\" and art.topic = \"Astrology\" return art";
@@ -148,6 +179,7 @@ namespace MediaCred.Models.Services
 
             return null;
         }
+
 
         private Article? GetArticleFromResult(List<IRecord> results, List<IRecord> authorResults, List<IRecord> backingResults, List<IRecord> arguments)
         {

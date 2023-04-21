@@ -293,17 +293,21 @@ namespace MediaCred.Controllers
         }
 
         [HttpPost("CreateBacking")]
-        public async Task CreateBacking(string artID, string argID)
+        public async Task CreateBacking(string backedByID, string backedID)
         {
-            var articleOld = await qs.GetArticleByLink(artID);
-            var subscribers = await qs.GetSubscribers(articleOld);
+            var isValidOrEvidence = await qs.IsBackingValid(backedByID);
 
-            var queryCreateBacking = $"MATCH(art:Article{{id: $artID}}), (arg:Argument{{claim: \"{argID}\"}}) " +
-            $"CREATE (arg)-[:BACKED_BY]->(art)";
+            var isAllBackingsValid = await qs.IsAllBackingsValid(backedID);
 
-            await qs.ExecuteQuery(queryCreateBacking, new { artID, argID });
+            var queryCreateBacking = $"MATCH(backedBy{{id: $backedByID}}), (backed{{id: \"{backedID}\"}}) " +
+            $"CREATE (backed)-[:BACKED_BY]->(backedBy) SET backed.IsValid = {isAllBackingsValid && isValidOrEvidence}";
 
-            CheckForChangesInCredibilityAndNotify(artID, subscribers);
+            await qs.ExecuteQuery(queryCreateBacking, new { backedByID});
+
+
+            //var articleOld = await qs.GetArticleByLink(artID);
+            //var subscribers = await qs.GetSubscribers(articleOld);
+            //CheckForChangesInCredibilityAndNotify(artID, subscribers);
         }
 
         [HttpPost("AddArticleReadToUser")]
