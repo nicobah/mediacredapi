@@ -239,12 +239,18 @@ namespace MediaCred.Controllers
 
             await qs.ExecuteQuery(query);
         }
+
         [HttpDelete("DeleteEvidence")]
         public async Task DeleteEvidence(string evidenceID)
         {
-
             var query = $"MATCH(e:Evidence{{id: \"{evidenceID}\"}}) DETACH DELETE e";
             await qs.ExecuteQuery(query, new { });
+        }
+
+        [HttpGet("GetArtByArgID")]
+        public async Task<Article> GetArtByArgID(string argID)
+        {
+            return await qs.GetArticleByArgumentID(argID);
         }
 
 
@@ -304,10 +310,12 @@ namespace MediaCred.Controllers
 
             await qs.ExecuteQuery(queryCreateBacking, new { backedByID});
 
-
-            //var articleOld = await qs.GetArticleByLink(artID);
-            //var subscribers = await qs.GetSubscribers(articleOld);
-            //CheckForChangesInCredibilityAndNotify(artID, subscribers);
+            var article = await qs.GetArticleByArgumentID(backedID);
+            if(article != null)
+            {
+                var subscribers = await qs.GetSubscribers(article);
+                await CheckForChangesInCredibilityAndNotify(article.ID, subscribers);
+            }
         }
 
         [HttpPost("AddArticleReadToUser")]

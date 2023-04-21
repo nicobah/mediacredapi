@@ -93,7 +93,7 @@ namespace MediaCred.Models.Services
         }
         public async Task<Article?> GetArticleById(string id)
         {
-            var query = @"MATCH (art:Article{id:7})
+            var query = @"MATCH (art:Article{id:$id})
                             RETURN art";
 
             var results = await ExecuteQuery(query, new { id });
@@ -106,6 +106,23 @@ namespace MediaCred.Models.Services
 
             return null;
         }
+
+        public async Task<Article?> GetArticleByArgumentID(string id)
+        {
+            var query = @"MATCH (arg:Argument{id:$id})<-[:CLAIMS]-(art:Article)
+                            RETURN art";
+
+            var results = await ExecuteQuery(query, new { id });
+
+
+            if (results != null && results.Count > 0)
+            {
+                return GetArticleFromResult(results, null, null, null);
+            }
+
+            return null;
+        }
+
         public async Task<bool> IsBackingValid(string ID)
         {
             
