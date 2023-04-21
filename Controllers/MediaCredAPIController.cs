@@ -243,8 +243,66 @@ namespace MediaCred.Controllers
         [HttpDelete("DeleteEvidence")]
         public async Task DeleteEvidence(string evidenceID)
         {
+            var arguments = await qs.GetArgumentsFromEvidenceID(evidenceID);
+
             var query = $"MATCH(e:Evidence{{id: \"{evidenceID}\"}}) DETACH DELETE e";
             await qs.ExecuteQuery(query, new { });
+
+            await UpdateArgumentValidations(arguments);
+        }
+
+        [HttpDelete("DeleteArgument")]
+        public async Task DeleteArgument(string argID)
+        {
+            var arguments = await qs.GetArgumentsFromBackingArgument(argID);
+
+            var query = $"MATCH(arg:Argument{{id: \"{argID}\"}}) DETACH DELETE arg";
+            await qs.ExecuteQuery(query, new { });
+
+            await UpdateArgumentValidations(arguments);
+        }
+
+        private async Task UpdateArgumentValidations(List<Argument> initialArguments)
+        {
+            for (var i = 0; i < initialArguments.Count; i++)
+            {
+                var arg = initialArguments[i];
+
+                var hasEvidence = await qs.HasEvidence(arg.ID);
+
+                var allBackingsValid = await qs.IsAllBackingsValid(arg.ID);
+
+                await qs.SetArgumentValidity((hasEvidence || allBackingsValid), arg.ID);
+
+                var argumentsBeingBacked = await qs.GetArgumentsFromBackingArgument(arg.ID);
+                if (argumentsBeingBacked.Count > 0)
+                {
+                    foreach (var a in argumentsBeingBacked)
+                    {
+                        if (!initialArguments.Where(x => x.ID == a.ID).Any())
+                        {
+                            initialArguments.Add(a);
+                        }
+                    }
+                }
+
+                /*var backings = await qs.GetBackingsArgument(arg.ID);
+                if (backings.Count > 0)
+                {
+                    foreach (var b in backings)
+                    {
+                        if (!initialArguments.Where(x => x.ID == b.ID).Any())
+                        {
+                            initialArguments.Add(b);
+                        }
+                    }
+                }*/
+
+                //if (!updatedIDs.Contains(arg.ID))
+                //{
+                //updatedIDs.Add(arg.ID);
+                //}
+            }
         }
 
         [HttpGet("GetArtByArgID")]
