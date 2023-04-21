@@ -139,20 +139,19 @@ namespace MediaCred.Models.Services
             }
 
         }
+
         public async Task<bool> IsAllBackingsValid(string ID)
         {
-            var query = @"match (n:Article{id:$ID})-[BACKED_BY]-(b)  return b";
+            var query = @"match (n:Argument{id:$ID})-[:BACKED_BY]->(b)  return b";
             var results = await ExecuteQuery(query, new { ID });
             var arg = GetArgumentsFromResult(results);
-            if (arg.Any(x => !x.IsValid))
+            if (arg.Any(x => !x.IsValid) || arg.Count == 0)
             {
                 return false;
             }
             return true;
 
         }
-
-
 
         public async Task<Article> GetArticleByTopicAndBias(string topic, string bias)
         {
@@ -163,12 +162,37 @@ namespace MediaCred.Models.Services
 
         public async Task<User?> GetUserByID(string id)
         {
-            var query = @"MATCH (usr:User{ID:$id})-[:SUBSCRIBES_TO]->(art:Article)
+            var query = @"MATCH (usr:User{id:$id})-[:SUBSCRIBES_TO]->(art:Article)
                             return usr, art";
 
             var results = await ExecuteQuery(query, new { id });
 
             return GetUserFromResults(results);
+        }
+
+        public async Task<Evidence?> GetEvidenceByID(string id)
+        {
+            var query = @"MATCH (evd:Evidence{id:$id})
+                            return evd";
+
+            var results = await ExecuteQuery(query, new {id});
+
+            return GetEvidenceFromResults(results);
+        }
+
+        private Evidence? GetEvidenceFromResults(List<IRecord> results)
+        {
+            try
+            {
+                var evidenceNode = results[0].Values.First().Value;
+
+                var evidence = JsonConvert.DeserializeObject<Evidence>(JsonConvert.SerializeObject(evidenceNode.As<INode>().Properties));
+
+                return evidence;
+            }
+            catch { }
+
+            return null;
         }
 
         private User? GetUserFromResults(List<IRecord> results)
@@ -218,6 +242,53 @@ namespace MediaCred.Models.Services
             return article;
         }
 
+        public async Task<bool> HasEvidence(string argID)
+        {
+            var query = $"MATCH(arg:Argument{{id: \"{argID}\"}})<-[:PROVES]-(e)" +
+                $"RETURN e";
+
+            var results = await ExecuteQuery(query, new { });
+
+            return results.Count > 0;
+        }
+
+        public async Task SetArgumentValidity(bool hasEvidence, string argID)
+        {
+            var query = $"MATCH(arg:Argument{{id: \"{argID}\"}})" +
+                $"SET arg.IsValid = {hasEvidence}";
+
+            await ExecuteQuery(query, new { });
+        }
+
+        public async Task<List<Argument>> GetBackingsArgument(string argumentID)
+        {
+            var query = $"MATCH(arg:Argument{{id: \"{argumentID}\"}})-[:BACKED_BY]->(a)" +
+                $"RETURN a";
+
+            var results = await ExecuteQuery(query, new { });
+
+            return GetArgumentsFromResult(results);
+        }
+
+        public async Task<List<Argument>> GetArgumentsFromBackingArgument(string backingArgID)
+        {
+            var query = $"MATCH(arg:Argument{{id: \"{backingArgID}\"}})<-[:BACKED_BY]-(a)" +
+                $"RETURN a";
+
+            var results = await ExecuteQuery(query, new { });
+
+            return GetArgumentsFromResult(results);
+        }
+
+        public async Task<List<Argument>> GetArgumentsFromEvidenceID(string evidenceID)
+        {
+            var query = $"MATCH(e:Evidence{{id: \"{evidenceID}\"}})-[:PROVES]->(arg)" +
+                $"RETURN arg";
+
+            var results = await ExecuteQuery(query, new { });
+
+            return GetArgumentsFromResult(results);
+        }
         private List<Argument> GetArgumentsFromResult(List<IRecord> arguments)
         {
             var argumentsList = new List<Argument>();
