@@ -139,6 +139,7 @@ namespace MediaCred.Models.Services
             }
 
         }
+
         public async Task<bool> IsAllBackingsValid(string ID)
         {
             var query = @"match (n:Argument{id:$ID})-[:BACKED_BY]->(b)  return b";
@@ -151,8 +152,6 @@ namespace MediaCred.Models.Services
             return true;
 
         }
-
-
 
         public async Task<Article> GetArticleByTopicAndBias(string topic, string bias)
         {
