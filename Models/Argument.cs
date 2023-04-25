@@ -12,6 +12,7 @@ namespace MediaCred
         public string? Warrant { get; set; }
         public bool IsValid { get; set; } = false;
 
+
         public override string GetFullString()
         {
             return "claim: " + this.Claim + " ground: " + this.Ground + " warrant: " + this.Warrant;

@@ -4,6 +4,7 @@ using Neo4jClient;
 using Newtonsoft.Json;
 using System;
 using System.Text;
+using System.Xml;
 
 namespace MediaCred.Models.Services
 {
@@ -58,7 +59,7 @@ namespace MediaCred.Models.Services
 
             var result = await ExecuteQuery(query);
             return GetUserFromResult(result);
-            
+
         }
 
         public async Task<Article?> GetArticleByLink(string url)
@@ -125,11 +126,11 @@ namespace MediaCred.Models.Services
 
         public async Task<bool> IsBackingValid(string ID)
         {
-            
+
             var query = @"match(arg:Argument{id:$ID}) return arg";
             var results = await ExecuteQuery(query, new { ID });
             var arg = GetArgumentsFromResult(results);
-            if(arg.Count < 1)
+            if (arg.Count < 1)
             {
                 return true;
             }
@@ -175,7 +176,7 @@ namespace MediaCred.Models.Services
             var query = @"MATCH (evd:Evidence{id:$id})
                             return evd";
 
-            var results = await ExecuteQuery(query, new {id});
+            var results = await ExecuteQuery(query, new { id });
 
             return GetEvidenceFromResults(results);
         }
@@ -202,10 +203,10 @@ namespace MediaCred.Models.Services
                 var userNode = results[0].Values.First().Value;
 
                 var user = JsonConvert.DeserializeObject<User>(JsonConvert.SerializeObject(userNode.As<INode>().Properties));
-                
+
                 user.SubscribesTo = new List<Article>();
 
-                foreach(var record in results)
+                foreach (var record in results)
                 {
                     var articleNode = record.Values.Last().Value;
 
@@ -220,7 +221,13 @@ namespace MediaCred.Models.Services
 
             return null;
         }
+        public async Task<List<Argument>> GetRecursiveBackings(string argID)
+        {
+            var query = $"MATCH(a:Argument{{id: \"{argID}\"}})-[b:BACKED_BY*..]->(a2) return a2,a,b";
+            var results = await ExecuteQuery(query, null);
+            return GetArgumentsFromResult(results);
 
+        }
 
         private Article? GetArticleFromResult(List<IRecord> results, List<IRecord> authorResults, List<IRecord> backingResults, List<IRecord> arguments)
         {
@@ -230,13 +237,13 @@ namespace MediaCred.Models.Services
 
             var article = JsonConvert.DeserializeObject<Article>(articlePropsJson);
 
-            if(article != null && arguments != null && arguments.Count > 0)
+            if (article != null && arguments != null && arguments.Count > 0)
                 article.Arguments = GetArgumentsFromResult(arguments);
-            
-            if(article != null && authorResults!= null && authorResults.Count > 0)
+
+            if (article != null && authorResults != null && authorResults.Count > 0)
                 article.Authors = GetAuthorsFromArticleRelationship(authorResults);
 
-            if(article != null && backingResults != null)
+            if (article != null && backingResults != null)
                 article.UsedAsBacking = backingResults.Count;
 
             return article;
@@ -291,21 +298,49 @@ namespace MediaCred.Models.Services
         }
         private List<Argument> GetArgumentsFromResult(List<IRecord> arguments)
         {
+
+
             var argumentsList = new List<Argument>();
 
-            foreach(var arg in arguments)
+            foreach (var arg in arguments)
             {
-                var argNode = arg.Values.First().Value;
 
-                var argPropsJson = JsonConvert.SerializeObject(argNode.As<INode>().Properties);
 
+                var argNode = (INode)arg.Values.First().Value;
+
+                var argPropsJson = JsonConvert.SerializeObject(argNode.Properties);
                 var argument = JsonConvert.DeserializeObject<Argument>(argPropsJson);
+                argument.Neo4JInternalID = argNode.Id;
 
-                if(argument != null)
+
+
+                //relationshiprelated
+                var relationShips = (List<Object>)arg.Values.Where(x => x.Key == "b").First().Value;
+                foreach (var rel in relationShips)
+                {
+                    var r = (IRelationship)rel;
+                    argument.Relationships.Add(new Relationship() { EndNodeId = r.EndNodeId, StartNodeId = r.StartNodeId, Type = r.Type });
+                }
+
+
+
+                if (argument != null)
                     argumentsList.Add(argument);
             }
 
+            GetBaseArgument(arguments, argumentsList);
+
             return argumentsList;
+        }
+
+        private static void GetBaseArgument(List<IRecord> arguments, List<Argument> argumentsList)
+        {
+            var x = arguments.FirstOrDefault().Values.Where(x => x.Key == "a").First().Value;
+            var y = (INode)x;
+            var argp = JsonConvert.SerializeObject(y.Properties);
+            var argument = JsonConvert.DeserializeObject<Argument>(argp);
+            argument.Neo4JInternalID = y.Id;
+            argumentsList.Add(argument);
         }
 
         private User? GetUserFromResult(List<IRecord> results)
@@ -332,14 +367,14 @@ namespace MediaCred.Models.Services
 
                 var author = JsonConvert.DeserializeObject<Author>(authorPropsJson);
 
-                if(author!=null)
+                if (author != null)
                     authors.Add(author);
             }
 
             return authors;
         }
 
-        public async Task<Dictionary<User,double>> GetSubscribers(Article art)
+        public async Task<Dictionary<User, double>> GetSubscribers(Article art)
         {
             var query = @"MATCH (sub:User)-[score:SUBSCRIBES_TO]->(art:Article)
                             RETURN sub, score";
@@ -357,10 +392,10 @@ namespace MediaCred.Models.Services
             var results = await ExecuteQuery(query);
 
             var dict = GetUsersAndScoresFromResult(results);
-            
+
             var newDict = new Dictionary<string, double>();
 
-            foreach(var keyval in dict)
+            foreach (var keyval in dict)
             {
                 newDict.Add(keyval.Key.Name, keyval.Value);
             }
@@ -368,21 +403,21 @@ namespace MediaCred.Models.Services
             return newDict;
         }
 
-        private Dictionary<User,double> GetUsersAndScoresFromResult(List<IRecord> results)
+        private Dictionary<User, double> GetUsersAndScoresFromResult(List<IRecord> results)
         {
-            var dict = new Dictionary<User,double>();
+            var dict = new Dictionary<User, double>();
 
-            foreach(var res in results)
+            foreach (var res in results)
             {
                 var userNode = res.Values.FirstOrDefault().Value;
                 var scoreRelation = res.Values.LastOrDefault().Value;
 
-                if(userNode !=null && scoreRelation != null)
+                if (userNode != null && scoreRelation != null)
                 {
                     var user = JsonConvert.DeserializeObject<User>(JsonConvert.SerializeObject(userNode.As<INode>().Properties));
                     var score = JsonConvert.DeserializeObject<SubscribesTo>(JsonConvert.SerializeObject(scoreRelation.As<IRelationship>().Properties));
 
-                    if(user != null && score != null)
+                    if (user != null && score != null)
                         dict.Add(user, score.Score);
                 }
             }

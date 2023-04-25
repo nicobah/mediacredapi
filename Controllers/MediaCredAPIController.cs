@@ -132,6 +132,23 @@ namespace MediaCred.Controllers
             var art = await qs.GetArticleByLink(link);
             return JsonConvert.SerializeObject(art);
         }
+        [HttpGet("ArgTree")]
+        public async Task<string> GetArgTree(string argId)
+        {
+            var args = await qs.GetRecursiveBackings(argId);
+            var relationships = args.SelectMany(x => x.Relationships).ToList();
+            relationships = relationships.GroupBy(x => x.StartNodeId.ToString() + x.EndNodeId.ToString()).Select(y => y.First()).ToList();
+            var nodes = args.Select(x => new { id = x.Neo4JInternalID });
+            var edges = relationships.Select(x => new { from = x.StartNodeId.ToString(), to = x.EndNodeId.ToString() });
+            var data = new
+            {
+                nodes,
+                edges,
+                args
+            };
+
+            return JsonConvert.SerializeObject(data);
+        }
 
         [HttpGet("GetSubscribers")]
         public async Task<Dictionary<string, double>> GetSubscribers(string id)
@@ -166,7 +183,7 @@ namespace MediaCred.Controllers
             }
             else
                 return null;
-          
+
         }
 
 
@@ -343,7 +360,7 @@ namespace MediaCred.Controllers
         [HttpPost("CreateUser")]
         public async Task CreateUser(string name)
         {
-            var user = new User() { Name = name, NextNudge = DateTime.Now.AddDays(7)};
+            var user = new User() { Name = name, NextNudge = DateTime.Now.AddDays(7) };
 
             user.ID = Guid.NewGuid().ToString();
 
@@ -373,10 +390,10 @@ namespace MediaCred.Controllers
             var queryCreateBacking = $"MATCH(backedBy{{id: $backedByID}}), (backed{{id: \"{backedID}\"}}) " +
             $"CREATE (backed)-[:BACKED_BY]->(backedBy) SET backed.IsValid = {isAllBackingsValid && isValidOrEvidence}";
 
-            await qs.ExecuteQuery(queryCreateBacking, new { backedByID});
+            await qs.ExecuteQuery(queryCreateBacking, new { backedByID });
 
             var article = await qs.GetArticleByArgumentID(backedID);
-            if(article != null)
+            if (article != null)
             {
                 var subscribers = await qs.GetSubscribers(article);
                 await CheckForChangesInCredibilityAndNotify(article.ID, subscribers);
@@ -386,15 +403,15 @@ namespace MediaCred.Controllers
         [HttpPost("AddArticleReadToUser")]
         public async Task<string> AddArticleReadToUser(string articleId, string userId)
         {
-           
-                var query = GenerateAppendQuery(userId, "articlesRead", "testArticleName", objtype: typeof(User));
 
-                var results = await qs.ExecuteQuery(query, new { userId });
+            var query = GenerateAppendQuery(userId, "articlesRead", "testArticleName", objtype: typeof(User));
 
-                return query;
+            var results = await qs.ExecuteQuery(query, new { userId });
 
-            }
-   
+            return query;
+
+        }
+
 
         [HttpPost("CreateRebuttal")]
         public async Task CreateRebuttal(string artID, string argID, string claimArtID)
@@ -455,7 +472,7 @@ namespace MediaCred.Controllers
                     }
                 }
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 //Missing arguments or something like that error
             }
@@ -585,7 +602,7 @@ namespace MediaCred.Controllers
 
             return sb.ToString();
         }
-        private string GenerateAppendQuery(string objID,  string arrayName, string insertObject, Type objtype = null)
+        private string GenerateAppendQuery(string objID, string arrayName, string insertObject, Type objtype = null)
         {
             var sb = new StringBuilder();
             try
