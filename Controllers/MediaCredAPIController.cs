@@ -138,7 +138,7 @@ namespace MediaCred.Controllers
             var args = await qs.GetRecursiveBackings(argId);
             var relationships = args.SelectMany(x => x.Relationships).ToList();
             relationships = relationships.GroupBy(x => x.StartNodeId.ToString() + x.EndNodeId.ToString()).Select(y => y.First()).ToList();
-            var nodes = args.Select(x => new { id = x.Neo4JInternalID });
+            var nodes = args.Select(x => new { id = x.Neo4JInternalID, fill = x.IsValid ? "red" : "green", ll = x.Claim });
             var edges = relationships.Select(x => new { from = x.StartNodeId.ToString(), to = x.EndNodeId.ToString() });
             var data = new
             {
@@ -332,7 +332,8 @@ namespace MediaCred.Controllers
         [HttpGet("GetArgsByArtLink")]
         public async Task<List<Argument>> GetArgsByArtLink(string url)
         {
-            return await qs.GetArgumentsByArticleLink(url);
+            var res = await qs.GetArgumentsByArticleLink(url);
+            return res;
         }
 
         [HttpGet("GetArtByArgID")]

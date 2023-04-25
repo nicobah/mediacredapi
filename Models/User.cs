@@ -40,7 +40,7 @@ namespace MediaCred.Models
             foreach (var artId in ArticlesRead)
             {
                 var art = await qs.GetArticleById(artId);
-                if(art.Topic != null)
+                if(art?.Topic != null)
                 {
                     return art.Topic;
                 }

@@ -326,11 +326,18 @@ namespace MediaCred.Models.Services
 
 
                 //relationshiprelated
+                try
+                {
+
                 var relationShips = (List<Object>)arg.Values.Where(x => x.Key == "b").First().Value;
                 foreach (var rel in relationShips)
                 {
                     var r = (IRelationship)rel;
                     argument.Relationships.Add(new Relationship() { EndNodeId = r.EndNodeId, StartNodeId = r.StartNodeId, Type = r.Type });
+                }
+                }catch(Exception e)
+                {
+
                 }
 
 
@@ -346,12 +353,17 @@ namespace MediaCred.Models.Services
 
         private static void GetBaseArgument(List<IRecord> arguments, List<Argument> argumentsList)
         {
-            var x = arguments.FirstOrDefault().Values.Where(x => x.Key == "a").First().Value;
-            var y = (INode)x;
+            try
+            {
+
+            var x = arguments.FirstOrDefault()?.Values.Where(x => x.Key == "a").First().Value;
+            var y = (INode?)x;
             var argp = JsonConvert.SerializeObject(y.Properties);
             var argument = JsonConvert.DeserializeObject<Argument>(argp);
-            argument.Neo4JInternalID = y.Id;
+            argument.Neo4JInternalID = y?.Id;
             argumentsList.Add(argument);
+            }catch(Exception e) { }
+
         }
 
         private User? GetUserFromResult(List<IRecord> results)
