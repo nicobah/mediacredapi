@@ -305,6 +305,12 @@ namespace MediaCred.Controllers
             }
         }
 
+        [HttpGet("GetArgsByArtLink")]
+        public async Task<List<Argument>> GetArgsByArtLink(string url)
+        {
+            return await qs.GetArgumentsByArticleLink(url);
+        }
+
         [HttpGet("GetArtByArgID")]
         public async Task<Article> GetArtByArgID(string argID)
         {

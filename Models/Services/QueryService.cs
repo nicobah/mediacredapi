@@ -91,6 +91,17 @@ namespace MediaCred.Models.Services
 
             return null;
         }
+
+        public async Task<List<Argument>> GetArgumentsByArticleLink(string url)
+        {
+            var query = @"MATCH (art:Article{link:$url})-[:CLAIMS]->(arg)
+                            return arg";
+
+            var results = await ExecuteQuery(query, new { url });
+
+            return GetArgumentsFromResult(results);
+        }
+
         public async Task<Article?> GetArticleById(string id)
         {
             var query = @"MATCH (art:Article{id:$id})
