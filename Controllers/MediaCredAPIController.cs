@@ -132,6 +132,16 @@ namespace MediaCred.Controllers
             var art = await qs.GetArticleByLink(link);
             return JsonConvert.SerializeObject(art);
         }
+
+        [HttpPost("AcceptValidity")]
+        public async Task AcceptValidity(string argID, string userID)
+        {
+            var query = @"MATCH (arg:Argument{id:$argID}), (usr:User{id:$userID})
+                            CREATE (usr)-[:ACCEPTS]->(arg)";
+
+            await qs.ExecuteQuery(query, new { argID, userID });
+        }
+
         [HttpGet("ArgTree")]
         public async Task<string> GetArgTree(string argId)
         {
