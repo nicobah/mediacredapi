@@ -320,14 +320,12 @@ namespace MediaCred.Models.Services
 
         private async Task<List<Argument>> GetArgumentsFromResult(List<IRecord> arguments, string userID = null)
         {
-
-
             var argumentsList = new List<Argument>();
+            var isAccepted = false;
+            string? acceptedID = null;
 
             foreach (var arg in arguments)
             {
-
-
                 var argNode = (INode)arg.Values.First().Value;
 
                 var argPropsJson = JsonConvert.SerializeObject(argNode.Properties);
@@ -340,7 +338,9 @@ namespace MediaCred.Models.Services
                 {
                     if(!argument.IsValid)
                     {
-                        argument.IsValid = await CheckForAccepted(argument.ID, userID);
+                        isAccepted = await CheckForAccepted(argument.ID, userID);
+                        argument.IsValid = isAccepted;
+                        acceptedID = isAccepted ? argument.ID : null;
                     }
                 }
 
@@ -366,6 +366,76 @@ namespace MediaCred.Models.Services
             }
 
             GetBaseArgument(arguments, argumentsList);
+
+            if (isAccepted)
+            {
+                var originID = acceptedID;
+                var invalidArgs = argumentsList.Where(x => x.IsValid == false).ToList();
+                var count = invalidArgs.Count;
+                for (int i = 0; i < count; i++)
+                {
+                    var query = $"MATCH(arg:Argument)-[:BACKED_BY]->(argOrigin:Argument{{id: \"{originID}\" }})" +
+                        $" RETURN arg";
+
+                    var results = await ExecuteQuery(query);
+
+                    if (results.Any())
+                    {
+                        var argNode = results.FirstOrDefault().Values.First().Value as INode;
+                        var argPropsJson = JsonConvert.SerializeObject(argNode.Properties);
+                        var argument = JsonConvert.DeserializeObject<Argument>(argPropsJson);
+
+                        var queryTwo = $"MATCH(arg:Argument)<-[:BACKED_BY]-(argOrigin:Argument{{id: \"{argument.ID}\" }})" +
+                        $" WHERE NOT arg.id = \"{originID}\" AND NOT arg.IsValid = false" +
+                        $" RETURN arg";
+
+                        var resultsTwo = await ExecuteQuery(queryTwo);
+
+                        if(!resultsTwo.Any())
+                        {
+                            argument.IsValid = true;
+                            var existingArg = argumentsList.Where(x => x.ID == argument.ID).FirstOrDefault();
+                            if (existingArg != null)
+                            {
+                                argumentsList.Remove(existingArg);
+                                originID = argument.ID;
+                                argument.Relationships = existingArg.Relationships;
+                                argument.Neo4JInternalID = existingArg.Neo4JInternalID;
+                                argumentsList.Add(argument);
+                            }
+                        }else
+                        {
+                            var validCount = 0;
+                            foreach(var res in resultsTwo)
+                            {
+                                var argNodeTwo = res.Values.First().Value as INode;
+                                var argPropsJsonTwo = JsonConvert.SerializeObject(argNodeTwo.Properties);
+                                var argumentTwo = JsonConvert.DeserializeObject<Argument>(argPropsJsonTwo);
+
+                                if (argumentTwo.IsValid)
+                                    validCount++;
+                            }
+                            if(validCount == resultsTwo.Count) 
+                            {
+                                argument.IsValid = true;
+                                var existingArg = argumentsList.Where(x => x.ID == argument.ID).FirstOrDefault();
+                                if (existingArg != null)
+                                {
+                                    argumentsList.Remove(existingArg);
+                                    originID = argument.ID;
+                                    argument.Relationships = existingArg.Relationships;
+                                    argument.Neo4JInternalID = existingArg.Neo4JInternalID;
+                                    argumentsList.Add(argument);
+                                }
+                            }
+                            else
+                            {
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
 
             return argumentsList;
         }
