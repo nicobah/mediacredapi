@@ -138,7 +138,7 @@ namespace MediaCred.Controllers
             var args = await qs.GetRecursiveBackings(argId);
             var relationships = args.SelectMany(x => x.Relationships).ToList();
             relationships = relationships.GroupBy(x => x.StartNodeId.ToString() + x.EndNodeId.ToString()).Select(y => y.First()).ToList();
-            var nodes = args.Select(x => new { id = x.Neo4JInternalID, fill = x.IsValid ? "red" : "green", ll = x.Claim });
+            var nodes = args.Select(x => new { id = x.Neo4JInternalID, fill = x.IsValid ? "green" : "red", ll = x.Claim });
             var edges = relationships.Select(x => new { from = x.StartNodeId.ToString(), to = x.EndNodeId.ToString() });
             var data = new
             {
