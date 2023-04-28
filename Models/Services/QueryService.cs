@@ -86,21 +86,21 @@ namespace MediaCred.Models.Services
 
             if (results != null && results.Count > 0)
             {
-                return GetArticleFromResult(results, resultAuthors, resultUsedAsBacking, resultArguments);
+                return await GetArticleFromResult(results, resultAuthors, resultUsedAsBacking, resultArguments);
             }
 
 
             return null;
         }
 
-        public async Task<List<Argument>> GetArgumentsByArticleLink(string url)
+        public async Task<List<Argument>> GetArgumentsByArticleLink(string url, string? userID)
         {
             var query = @"MATCH (art:Article{link:$url})-[:CLAIMS]->(arg)
                             return arg";
 
             var results = await ExecuteQuery(query, new { url });
 
-            return GetArgumentsFromResult(results);
+            return await GetArgumentsFromResult(results, userID);
         }
 
         public async Task<Article?> GetArticleById(string id)
@@ -113,7 +113,7 @@ namespace MediaCred.Models.Services
 
             if (results != null && results.Count > 0)
             {
-                return GetArticleFromResult(results, null, null, null);
+                return await GetArticleFromResult(results, null, null, null);
             }
 
             return null;
@@ -129,7 +129,7 @@ namespace MediaCred.Models.Services
 
             if (results != null && results.Count > 0)
             {
-                return GetArticleFromResult(results, null, null, null);
+                return await GetArticleFromResult(results, null, null, null);
             }
 
             return null;
@@ -140,7 +140,7 @@ namespace MediaCred.Models.Services
 
             var query = @"match(arg:Argument{id:$ID}) return arg";
             var results = await ExecuteQuery(query, new { ID });
-            var arg = GetArgumentsFromResult(results);
+            var arg = await GetArgumentsFromResult(results);
             if (arg.Count < 1)
             {
                 return true;
@@ -156,7 +156,7 @@ namespace MediaCred.Models.Services
         {
             var query = @"match (n:Argument{id:$ID})-[:BACKED_BY]->(b)  return b";
             var results = await ExecuteQuery(query, new { ID });
-            var arg = GetArgumentsFromResult(results);
+            var arg = await GetArgumentsFromResult(results);
             if (arg.Any(x => !x.IsValid) || arg.Count == 0)
             {
                 return false;
@@ -169,7 +169,7 @@ namespace MediaCred.Models.Services
         {
             var query = $"match(art:Article) where art.politicalBias = \"left\" and art.topic = \"Astrology\" return art";
             var results = await ExecuteQuery(query, null);
-            return GetArticleFromResult(results, null, null, null);
+            return await GetArticleFromResult(results, null, null, null);
         }
 
         public async Task<User?> GetUserByID(string id)
@@ -232,15 +232,15 @@ namespace MediaCred.Models.Services
 
             return null;
         }
-        public async Task<List<Argument>> GetRecursiveBackings(string argID)
+        public async Task<List<Argument>> GetRecursiveBackings(string argID, string? userID)
         {
             var query = $"MATCH(a:Argument{{id: \"{argID}\"}})-[b:BACKED_BY*..]->(a2) return a2,a,b";
             var results = await ExecuteQuery(query, null);
-            return GetArgumentsFromResult(results);
+            return await GetArgumentsFromResult(results, userID);
 
         }
 
-        private Article? GetArticleFromResult(List<IRecord> results, List<IRecord> authorResults, List<IRecord> backingResults, List<IRecord> arguments)
+        private async Task<Article?> GetArticleFromResult(List<IRecord> results, List<IRecord> authorResults, List<IRecord> backingResults, List<IRecord> arguments)
         {
             var articleNode = results[0].Values.First().Value;
 
@@ -249,7 +249,7 @@ namespace MediaCred.Models.Services
             var article = JsonConvert.DeserializeObject<Article>(articlePropsJson);
 
             if (article != null && arguments != null && arguments.Count > 0)
-                article.Arguments = GetArgumentsFromResult(arguments);
+                article.Arguments = await GetArgumentsFromResult(arguments);
 
             if (article != null && authorResults != null && authorResults.Count > 0)
                 article.Authors = GetAuthorsFromArticleRelationship(authorResults);
@@ -285,7 +285,7 @@ namespace MediaCred.Models.Services
 
             var results = await ExecuteQuery(query, new { });
 
-            return GetArgumentsFromResult(results);
+            return await GetArgumentsFromResult(results);
         }
 
         public async Task<List<Argument>> GetArgumentsFromBackingArgument(string backingArgID)
@@ -295,7 +295,7 @@ namespace MediaCred.Models.Services
 
             var results = await ExecuteQuery(query, new { });
 
-            return GetArgumentsFromResult(results);
+            return await GetArgumentsFromResult(results);
         }
 
         public async Task<List<Argument>> GetArgumentsFromEvidenceID(string evidenceID)
@@ -305,9 +305,20 @@ namespace MediaCred.Models.Services
 
             var results = await ExecuteQuery(query, new { });
 
-            return GetArgumentsFromResult(results);
+            return await GetArgumentsFromResult(results);
         }
-        private List<Argument> GetArgumentsFromResult(List<IRecord> arguments)
+
+        private async Task<bool> CheckForAccepted(string argID, string userID)
+        {
+            var query = @"MATCH(usr:User{id:$userID})-[:ACCEPTS]->(arg:Argument{id:$argID})
+                            RETURN arg";
+
+            var results = await ExecuteQuery(query, new { argID, userID });
+
+            return results.Any();
+        }
+
+        private async Task<List<Argument>> GetArgumentsFromResult(List<IRecord> arguments, string userID = null)
         {
 
 
@@ -323,7 +334,15 @@ namespace MediaCred.Models.Services
                 var argument = JsonConvert.DeserializeObject<Argument>(argPropsJson);
                 argument.Neo4JInternalID = argNode.Id;
 
-
+                argument.ID = argNode.Properties.FirstOrDefault(x => x.Key == "id").Value as string;
+                
+                if(userID != null && argument != null && argument.ID != null)
+                {
+                    if(!argument.IsValid)
+                    {
+                        argument.IsValid = await CheckForAccepted(argument.ID, userID);
+                    }
+                }
 
                 //relationshiprelated
                 try

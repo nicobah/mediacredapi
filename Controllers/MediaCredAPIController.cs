@@ -134,18 +134,20 @@ namespace MediaCred.Controllers
         }
 
         [HttpPost("AcceptValidity")]
-        public async Task AcceptValidity(string argID, string userID)
+        public async Task AcceptValidity(string argInternalID, string userID)
         {
-            var query = @"MATCH (arg:Argument{id:$argID}), (usr:User{id:$userID})
-                            CREATE (usr)-[:ACCEPTS]->(arg)";
+            var query = $"MATCH (arg:Argument), (usr:User{{ id: \"{userID}\" }})" +
+                $" WHERE ID(arg) = {argInternalID}" +
+                $" CREATE (usr)-[:ACCEPTS]->(arg)" +
+                $" RETURN arg, usr";
 
-            await qs.ExecuteQuery(query, new { argID, userID });
+            await qs.ExecuteQuery(query, new { argInternalID, userID });
         }
 
         [HttpGet("ArgTree")]
-        public async Task<string> GetArgTree(string argId)
+        public async Task<string> GetArgTree(string argId, string? userID)
         {
-            var args = await qs.GetRecursiveBackings(argId);
+            var args = await qs.GetRecursiveBackings(argId, userID);
             var relationships = args.SelectMany(x => x.Relationships).ToList();
             relationships = relationships.GroupBy(x => x.StartNodeId.ToString() + x.EndNodeId.ToString()).Select(y => y.First()).ToList();
             var nodes = args.Select(x => new { id = x.Neo4JInternalID, fill = x.IsValid ? "red" : "green", ll = x.Claim });
@@ -340,9 +342,9 @@ namespace MediaCred.Controllers
         }
 
         [HttpGet("GetArgsByArtLink")]
-        public async Task<List<Argument>> GetArgsByArtLink(string url)
+        public async Task<List<Argument>> GetArgsByArtLink(string url, string? userID)
         {
-            var res = await qs.GetArgumentsByArticleLink(url);
+            var res = await qs.GetArgumentsByArticleLink(url, userID);
             return res;
         }
 
