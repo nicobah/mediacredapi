@@ -4,10 +4,11 @@ namespace MediaCred.Models
 {
     public class User
     {
+        
         public string ID { get; set; }
         public string Name { get; set; }
         public DateTime NextNudge { get; set; }
-        public int PoliticalBias { get; set; } = 1;
+        public int PoliticalBias { get; set; } = 0;
         public List<Article>? SubscribesTo { get; set; }
         public List<string>? ArticlesRead { get; set; }
         public double NotificationThreshold { get; set; } = 1;
@@ -18,6 +19,7 @@ namespace MediaCred.Models
         public double AuthorWeight { get; set; } = 1;
         public double BackingsWeight { get; set; } = 1;
 
+    
 
         public string GetOppositeBias()
         {
@@ -51,5 +53,8 @@ namespace MediaCred.Models
             }
             return "topic";
         }
+
+ 
+
     }
 }
