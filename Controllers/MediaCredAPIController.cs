@@ -258,7 +258,7 @@ namespace MediaCred.Controllers
 
                 var rebutsList = qs.GetArgumentsFromResultsSimple(resultsRebuts);
 
-                var argumentNode = JsonConvert.DeserializeObject<Argument>(JsonConvert.SerializeObject(resultsArg.FirstOrDefault().As<INode>().Properties));
+                var argumentNode = JsonConvert.DeserializeObject<Argument>(JsonConvert.SerializeObject(resultsArg.FirstOrDefault()[0].As<INode>().Properties));
 
                 return JsonConvert.SerializeObject(GetToulminStringFit(argumentNode, backingsList, rebutsList), Formatting.Indented);
             }
