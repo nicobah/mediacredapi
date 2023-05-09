@@ -234,6 +234,69 @@ namespace MediaCred.Controllers
             return JsonConvert.SerializeObject(await GetToulminString(results), Formatting.Indented);
         }
 
+        [HttpGet("GetToulminString")]
+        public async Task<string> GetToulminString(string argID)
+        {
+            try
+            {
+                var queryArg = @"MATCH (arg:Argument{id: $argID})
+                            RETURN arg";
+
+                var resultsArg = await qs.ExecuteQuery(queryArg, new { argID });
+
+                var queryBackings = @"MATCH (arg:Argument{id: $argID})-[:BACKED_BY]->(b:Argument)
+                            RETURN b";
+
+                var resultsBackings = await qs.ExecuteQuery(queryBackings, new { argID });
+
+                var backingsList = qs.GetArgumentsFromResultsSimple(resultsBackings);
+
+                var queryRebuts = @"MATCH (arg:Argument{id: $argID})-[:DISPUTED_BY]->(r:Argument)
+                            RETURN r";
+
+                var resultsRebuts = await qs.ExecuteQuery(queryRebuts, new { argID });
+
+                var rebutsList = qs.GetArgumentsFromResultsSimple(resultsRebuts);
+
+                var argumentNode = JsonConvert.DeserializeObject<Argument>(JsonConvert.SerializeObject(resultsArg.FirstOrDefault().As<INode>().Properties));
+
+                return JsonConvert.SerializeObject(GetToulminStringFit(argumentNode, backingsList, rebutsList), Formatting.Indented);
+            }
+            catch
+            {
+
+            }
+
+            return "N/A";
+        }
+
+        private string GetToulminStringFit(Argument arg, List<Argument> backings, List<Argument> rebuts)
+        {
+            var backingsCount = backings.Count();
+
+            var rebutsCount = rebuts.Count();
+
+
+            if (arg.Warrant != null && arg.Warrant.Length > 1 && arg.Ground != null && arg.Ground.Length > 1)
+            {
+                if (backingsCount > 0 && rebutsCount == 0)
+                    return "good fit";
+
+                if (rebutsCount > 0 && backingsCount == 0)
+                    return "bad fit";
+
+                if (backingsCount == 0 && rebutsCount == 0)
+                    return "normal fit";
+
+                if (backingsCount > 0 && rebutsCount > 0)
+                {
+                    return backingsCount > rebutsCount ? "good fit" : "bad fit";
+                }
+            }
+
+            return "weak fit";
+        }
+
         [HttpGet("AuthorFilterName")]
         public async Task<List<Author>> GetAuthorsByName(string name)
         {

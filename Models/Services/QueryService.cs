@@ -174,8 +174,8 @@ namespace MediaCred.Models.Services
 
         public async Task<User?> GetUserByID(string id)
         {
-            var query = @"MATCH (usr:User{id:$id})-[:SUBSCRIBES_TO]->(art:Article)
-                            return usr, art";
+            var query = @"MATCH (usr:User{id:$id})
+                            return usr";
 
             var results = await ExecuteQuery(query, new { id });
 
@@ -221,9 +221,13 @@ namespace MediaCred.Models.Services
                 {
                     var articleNode = record.Values.Last().Value;
 
-                    var article = JsonConvert.DeserializeObject<Article>(JsonConvert.SerializeObject(articleNode.As<INode>().Properties));
+                    try
+                    {
+                        var article = JsonConvert.DeserializeObject<Article>(JsonConvert.SerializeObject(articleNode.As<INode>().Properties));
 
-                    user.SubscribesTo.Add(article);
+                        user.SubscribesTo.Add(article);
+                    }
+                    catch { }
                 }
 
                 return user;
@@ -238,6 +242,25 @@ namespace MediaCred.Models.Services
             var results = await ExecuteQuery(query, null);
             return await GetArgumentsFromResult(results, userID);
 
+        }
+
+        public List<Argument> GetArgumentsFromResultsSimple(List<IRecord> results)
+        {
+            var argList = new List<Argument>();
+
+            foreach (var res in results)
+            {
+                var argNode = res.Values.First().Value;
+
+                var argPropsJson = JsonConvert.SerializeObject(argNode.As<INode>().Properties);
+
+                var arg = JsonConvert.DeserializeObject<Argument>(argPropsJson);
+
+                if (arg != null)
+                { argList.Add(arg); }
+            }
+
+            return argList;
         }
 
         private async Task<Article?> GetArticleFromResult(List<IRecord> results, List<IRecord> authorResults, List<IRecord> backingResults, List<IRecord> arguments)
@@ -333,10 +356,10 @@ namespace MediaCred.Models.Services
                 argument.Neo4JInternalID = argNode.Id;
 
                 argument.ID = argNode.Properties.FirstOrDefault(x => x.Key == "id").Value as string;
-                
-                if(userID != null && argument != null && argument.ID != null)
+
+                if (userID != null && argument != null && argument.ID != null)
                 {
-                    if(!argument.IsValid)
+                    if (!argument.IsValid)
                     {
                         isAccepted = await CheckForAccepted(argument.ID, userID);
                         argument.IsValid = isAccepted;
@@ -348,13 +371,14 @@ namespace MediaCred.Models.Services
                 try
                 {
 
-                var relationShips = (List<Object>)arg.Values.Where(x => x.Key == "b").First().Value;
-                foreach (var rel in relationShips)
-                {
-                    var r = (IRelationship)rel;
-                    argument.Relationships.Add(new Relationship() { EndNodeId = r.EndNodeId, StartNodeId = r.StartNodeId, Type = r.Type });
+                    var relationShips = (List<Object>)arg.Values.Where(x => x.Key == "b").First().Value;
+                    foreach (var rel in relationShips)
+                    {
+                        var r = (IRelationship)rel;
+                        argument.Relationships.Add(new Relationship() { EndNodeId = r.EndNodeId, StartNodeId = r.StartNodeId, Type = r.Type });
+                    }
                 }
-                }catch(Exception e)
+                catch (Exception e)
                 {
 
                 }
@@ -391,7 +415,7 @@ namespace MediaCred.Models.Services
 
                         var resultsTwo = await ExecuteQuery(queryTwo);
 
-                        if(!resultsTwo.Any())
+                        if (!resultsTwo.Any())
                         {
                             argument.IsValid = true;
                             var existingArg = argumentsList.Where(x => x.ID == argument.ID).FirstOrDefault();
@@ -403,10 +427,11 @@ namespace MediaCred.Models.Services
                                 argument.Neo4JInternalID = existingArg.Neo4JInternalID;
                                 argumentsList.Add(argument);
                             }
-                        }else
+                        }
+                        else
                         {
                             var validCount = 0;
-                            foreach(var res in resultsTwo)
+                            foreach (var res in resultsTwo)
                             {
                                 var argNodeTwo = res.Values.First().Value as INode;
                                 var argPropsJsonTwo = JsonConvert.SerializeObject(argNodeTwo.Properties);
@@ -415,7 +440,7 @@ namespace MediaCred.Models.Services
                                 if (argumentTwo.IsValid)
                                     validCount++;
                             }
-                            if(validCount == resultsTwo.Count) 
+                            if (validCount == resultsTwo.Count)
                             {
                                 argument.IsValid = true;
                                 var existingArg = argumentsList.Where(x => x.ID == argument.ID).FirstOrDefault();
@@ -445,13 +470,14 @@ namespace MediaCred.Models.Services
             try
             {
 
-            var x = arguments.FirstOrDefault()?.Values.Where(x => x.Key == "a").First().Value;
-            var y = (INode?)x;
-            var argp = JsonConvert.SerializeObject(y.Properties);
-            var argument = JsonConvert.DeserializeObject<Argument>(argp);
-            argument.Neo4JInternalID = y?.Id;
-            argumentsList.Add(argument);
-            }catch(Exception e) { }
+                var x = arguments.FirstOrDefault()?.Values.Where(x => x.Key == "a").First().Value;
+                var y = (INode?)x;
+                var argp = JsonConvert.SerializeObject(y.Properties);
+                var argument = JsonConvert.DeserializeObject<Argument>(argp);
+                argument.Neo4JInternalID = y?.Id;
+                argumentsList.Add(argument);
+            }
+            catch (Exception e) { }
 
         }
 
