@@ -15,6 +15,7 @@ using System.Xml.Linq;
 using Microsoft.AspNetCore.Http;
 using Neo4jClient.Cypher;
 using Xunit.Sdk;
+using Microsoft.Extensions.Configuration;
 
 namespace MediaCred.Controllers
 {
@@ -183,7 +184,11 @@ namespace MediaCred.Controllers
             {
                 //TODO
                 //SET next nudge datetime
-
+                var config = new ConfigurationBuilder()
+                .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+                .Build();
+                var h = new Helper(config);
+                var nextNudge = h.GetNextNudge(user);
 
                 //Get the last article read with a topic
                 var topic = await user.GetLatestTopic(qs);
