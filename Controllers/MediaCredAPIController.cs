@@ -178,9 +178,9 @@ namespace MediaCred.Controllers
         [HttpGet("GetNudge")]
         public async Task<string> GetNudge(string id)
         {
-            User user = await GetUserByID(id);
+            User? user = await GetUserByID(id);
             //Check if nudge time has been exceeded
-            if (user.NextNudge < DateTime.Now)
+            if (user?.NextNudge < DateTime.Now)
             {
                 //TODO
                 //SET next nudge datetime
@@ -285,21 +285,21 @@ namespace MediaCred.Controllers
             if (arg.Warrant != null && arg.Warrant.Length > 1 && arg.Ground != null && arg.Ground.Length > 1)
             {
                 if (backingsCount > 0 && rebutsCount == 0)
-                    return "good fit";
+                    return "Good";
 
                 if (rebutsCount > 0 && backingsCount == 0)
-                    return "bad fit";
+                    return "Bad";
 
                 if (backingsCount == 0 && rebutsCount == 0)
-                    return "normal fit";
+                    return "Normal";
 
                 if (backingsCount > 0 && rebutsCount > 0)
                 {
-                    return backingsCount > rebutsCount ? "good fit" : "bad fit";
+                    return backingsCount > rebutsCount ? "Good" : "Bad";
                 }
             }
 
-            return "weak fit";
+            return "Weak";
         }
 
         [HttpGet("AuthorFilterName")]
