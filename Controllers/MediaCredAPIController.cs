@@ -424,12 +424,12 @@ namespace MediaCred.Controllers
 
 
         [HttpPost("CreateArticle")]
-        public async Task CreateArticle(Article art)
+        public async Task CreateArticle(ArticleDto art)
         {
             art.ID = Guid.NewGuid().ToString();
 
             var query = $"MATCH(aut:Author{{id: \"{art.AuthorID}\"}}) ";
-            query += GenerateCreateQuery(art, objID: "a") + ", (a)-[:WRITTEN_BY]->(aut)";
+            query += GenerateCreateQuery(art, objtype: typeof(Article),objID: "a") + ", (a)-[:WRITTEN_BY]->(aut)";
 
             await qs.ExecuteQuery(query, new { art.ID, art.Title, art.AuthorID, art.Publisher, art.Link, art.InappropriateWords, art.References, art.Topic });
         }
