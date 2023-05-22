@@ -13,6 +13,7 @@ namespace MediaCred
         public string? Education { get; set; }
         public string? PoliticalOrientation { get; set; }
         public string? AreaOfExpertise { get; set; } //Skills, kompetences etc.
+        public string? PhysicalAddress { get; set; }
 
         public double? Credibility { get; set; }
 

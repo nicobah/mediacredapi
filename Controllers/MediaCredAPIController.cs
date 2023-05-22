@@ -100,7 +100,8 @@ namespace MediaCred.Controllers
                             var currentEval = TranslateEvals(eval.Key);
                             if (currentEval != null)
                             {
-                                authorCred += currentEval.GetEvaluation(author).Result * (eval.Value / 100);
+                                //authorCred += currentEval.GetEvaluation(author).Result * (eval.Value / 100);
+                                authorCred += currentEval.GetEvaluation(author).Result;
                             }
                         }
                         author.Credibility = authorCred;
@@ -271,6 +272,13 @@ namespace MediaCred.Controllers
 
                 var backingsList = qs.GetArgumentsFromResultsSimple(resultsBackings);
 
+                var queryEvidence = @"MATCH (evd:Evidence)-[:PROVES]->(arg:Argument{id: $argID})
+                            RETURN evd";
+
+                var resultsEvidence = await qs.ExecuteQuery(queryEvidence, new { argID });
+
+                var evidenceList = qs.GetEvidenceFromResultsList(resultsEvidence);
+
                 var queryRebuts = @"MATCH (arg:Argument{id: $argID})-[:DISPUTED_BY]->(r:Argument)
                             RETURN r";
 
@@ -280,7 +288,7 @@ namespace MediaCred.Controllers
 
                 var argumentNode = JsonConvert.DeserializeObject<Argument>(JsonConvert.SerializeObject(resultsArg.FirstOrDefault()[0].As<INode>().Properties));
 
-                return JsonConvert.SerializeObject(GetToulminStringFit(argumentNode, backingsList, rebutsList), Formatting.Indented);
+                return JsonConvert.SerializeObject(GetToulminStringFit(argumentNode, backingsList, rebutsList, evidenceList), Formatting.Indented);
             }
             catch
             {
@@ -290,9 +298,9 @@ namespace MediaCred.Controllers
             return "N/A";
         }
 
-        private string GetToulminStringFit(Argument arg, List<Argument> backings, List<Argument> rebuts)
+        private string GetToulminStringFit(Argument arg, List<Argument> backings, List<Argument> rebuts, List<Evidence> evidences)
         {
-            var backingsCount = backings.Count();
+            var backingsCount = backings.Count() + evidences.Count();
 
             var rebutsCount = rebuts.Count();
 
