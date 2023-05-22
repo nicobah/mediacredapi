@@ -248,6 +248,25 @@ namespace MediaCred.Models.Services
 
         }
 
+        public List<Evidence> GetEvidenceFromResultsList(List<IRecord> results)
+        {
+            var evdList = new List<Evidence>();
+
+            foreach (var res in results)
+            {
+                var evdNode = res.Values.First().Value;
+
+                var evdPropsJson = JsonConvert.SerializeObject(evdNode.As<INode>().Properties);
+
+                var evd = JsonConvert.DeserializeObject<Evidence>(evdPropsJson);
+
+                if (evd != null)
+                { evdList.Add(evd); }
+            }
+
+            return evdList;
+        }
+
         public List<Argument> GetArgumentsFromResultsSimple(List<IRecord> results)
         {
             var argList = new List<Argument>();
