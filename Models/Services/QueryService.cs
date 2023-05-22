@@ -186,6 +186,35 @@ namespace MediaCred.Models.Services
             return GetUserFromResults(results);
         }
 
+        public async Task<List<Author>> GetAuthorsByArticleID(string artID)
+        {
+            var query = @"MATCH (art:Article{id:$artID})-[:WRITTEN_BY]->(auth:Author)
+                            return auth";
+
+            var results = await ExecuteQuery(query, new { artID });
+
+            return GetAuthorsFromResultsList(results);
+        }
+
+        public List<Author> GetAuthorsFromResultsList(List<IRecord> results)
+        {
+            var authList = new List<Author>();
+
+            foreach (var res in results)
+            {
+                var authNode = res.Values.First().Value;
+
+                var authPropsJson = JsonConvert.SerializeObject(authNode.As<INode>().Properties);
+
+                var auth = JsonConvert.DeserializeObject<Author>(authPropsJson);
+
+                if (auth != null)
+                { authList.Add(auth); }
+            }
+
+            return authList;
+        }
+
         public async Task<Evidence?> GetEvidenceByID(string id)
         {
             var query = @"MATCH (evd:Evidence{id:$id})
@@ -412,7 +441,7 @@ namespace MediaCred.Models.Services
                     argumentsList.Add(argument);
             }
 
-            GetBaseArgument(arguments, argumentsList);
+            //GetBaseArgument(arguments, argumentsList);
 
             if (isAccepted)
             {

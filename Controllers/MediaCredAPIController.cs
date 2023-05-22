@@ -99,7 +99,8 @@ namespace MediaCred.Controllers
                             var currentEval = TranslateEvals(eval.Key);
                             if (currentEval != null)
                             {
-                                authorCred += currentEval.GetEvaluation(author).Result * (eval.Value / 100);
+                                //authorCred += currentEval.GetEvaluation(author).Result * (eval.Value / 100);
+                                authorCred += currentEval.GetEvaluation(author).Result;
                             }
                         }
                         author.Credibility = authorCred;

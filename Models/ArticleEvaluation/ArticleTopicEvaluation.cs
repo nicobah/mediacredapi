@@ -6,40 +6,54 @@ namespace MediaCred.Models.ArticleEvaluation
     public class ArticleTopicEvaluation : IArticleCredibilityEvaluation
     {
         public string Name { get; set; } = "ArticleTopicExpertise";
-        public string Description { get; set; } = "Evaluates the article based on the indicated topic and how it relates to the authors area of expertise.";
+        public string Description { get; set; } = "Evaluates the article based on the indicated topic and how it relates to the authors area of expertise. For each author it checks how many topics correlate to the author expertise, then finally it takes the average score of all the authors.";
 
         public async Task<double> GetEvaluation(Article art)
         {
-            var resultCalc = 0;
+            var resultCalc = 0.0;
 
             if (art.Topic != null)
             {
                 var qs = new QueryService();
-                var author = await qs.GetAuthorByID(art.AuthorID);
-                
-                if(author != null && author.AreaOfExpertise != null && author.AreaOfExpertise.Length > 0) 
+                var authorList = await qs.GetAuthorsByArticleID(art.ID);
+
+                var topicKeyWords = art.Topic.Split(",");
+                try
                 {
-                    var topicKeyWords = art.Topic.Split(" ");
-
-                    var authorExpertiseKeywords = author.AreaOfExpertise.Split(" ");
-
-                    foreach(var word in authorExpertiseKeywords)
+                    foreach(var author in authorList)
                     {
-                        foreach(var tWord in topicKeyWords)
+                        if (author != null && author.AreaOfExpertise != null && author.AreaOfExpertise.Length > 0)
                         {
-                            //If a word in the topic contains some form of a word from the authors area of expertise, increase score by 10
-                            //This enables cases like topic = Java, Author AoE = Java-based (good)
-                            //But also enables cases like topic = Java, Author AoE = JavaScript (bad)
-                            //This is a crude implementation, so it would preferably be improved.
-                            if (tWord.ToLower().Contains(word.ToLower()))    
+                            var authorExpertiseKeywords = author.AreaOfExpertise.Split(",");
+
+                            var authorCalc = 0.0;
+
+                            foreach (var word in authorExpertiseKeywords)
                             {
-                                resultCalc += 10;
+                                word.Trim();
+
+                                foreach (var tWord in topicKeyWords)
+                                {
+                                    //If a word in the topic contains some form of a word from the authors area of expertise, increase score by 10
+                                    //This enables cases like topic = Java, Author AoE = Java-based (good)
+                                    //But also enables cases like topic = Java, Author AoE = JavaScript (bad)
+                                    //This is a crude implementation, so it would preferably be improved.
+                                    tWord.Trim();
+                                    if (tWord.ToLower().Contains(word.ToLower()))
+                                    {
+                                        authorCalc += 1;
+                                    }
+                                }
                             }
+                            if(authorCalc > 0)
+                                resultCalc += (authorCalc / topicKeyWords.Count())*100;
                         }
                     }
-                }
-            }
 
+                    resultCalc = resultCalc / authorList.Count();
+                }
+                catch { }
+            }
             return resultCalc > 100 ? 100 : resultCalc;
         }
     }
