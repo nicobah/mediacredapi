@@ -16,7 +16,7 @@ namespace MediaCred
 
         public double? Credibility { get; set; }
 
-        public int? References { get; set; } //Should probably be list of articles?
+        public int? References { get; set; } //Should probably be list of articles, but not for the prototype
 
         public string? Topic { get; set; }
 
