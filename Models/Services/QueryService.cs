@@ -1,4 +1,5 @@
 using MediaCred.Controllers;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Neo4j.Driver;
 using Neo4jClient;
 using Newtonsoft.Json;
@@ -242,11 +243,25 @@ namespace MediaCred.Models.Services
         }
         public async Task<List<Argument>> GetRecursiveBackings(string argID, string? userID)
         {
-            var query = $"MATCH(a:Argument{{id: \"{argID}\"}})-[b:BACKED_BY*..]->(a2) return a2,a,b";
+            var query = $"MATCH(a:Argument{{id: \"{argID}\"}}) OPTIONAL MATCH (a)-[b:BACKED_BY*..]->(a2) return a2,a,b";
             var results = await ExecuteQuery(query, null);
+            //if(results.Count == 0)
+            //{
+            //    var query2 = $"MATCH(a:Argument{{id: \"{argID}\"}})return a";
+            //    var results2 = await ExecuteQuery(query2, null);
+            //    return await GetArgumentsFromResult(results2, userID);
+            //}
             return await GetArgumentsFromResult(results, userID);
 
         }
+        public async Task<List<Evidence>> GetEvidenceRelations(string argID)
+        {
+            var query = $"MATCH(e:Evidence)-[b:PROVES*..]->(a2:Argument{{id: \"{argID}\"}}) return e,b";
+            var results = await ExecuteQuery(query, null);
+
+            return await GetAllEvidenceFromResults(results);
+        }
+
 
         public List<Argument> GetArgumentsFromResultsSimple(List<IRecord> results)
         {
@@ -354,8 +369,12 @@ namespace MediaCred.Models.Services
             foreach (var arg in arguments)
             {
                 var argNode = (INode)arg.Values.First().Value;
-
+                if (argNode == null)
+                {
+                    argNode = (INode)arg.Values.Where(x => x.Key == "a").First().Value;
+                }
                 var argPropsJson = JsonConvert.SerializeObject(argNode.Properties);
+                
                 var argument = JsonConvert.DeserializeObject<Argument>(argPropsJson);
                 argument.Neo4JInternalID = argNode.Id;
 
@@ -468,7 +487,44 @@ namespace MediaCred.Models.Services
 
             return argumentsList;
         }
+  
 
+        private async Task<List<Evidence>> GetAllEvidenceFromResults(List<IRecord> evidenceList)
+        {
+            var evidenceResult = new List<Evidence>();
+            foreach (var ev in evidenceList)
+            {
+                var evNode = (INode)ev.Values.First().Value;
+
+                var evProps = JsonConvert.SerializeObject(evNode.Properties);
+                var evidence = JsonConvert.DeserializeObject<Evidence>(evProps);
+                evidence.Neo4JInternalID = evNode.Id;
+
+                evidence.ID = evNode.Properties.FirstOrDefault(x => x.Key == "id").Value as string;
+
+                //relationshiprelated
+                try
+                {
+
+                    var relationShips = (List<Object>)ev.Values.Where(x => x.Key == "b").First().Value;
+                    foreach (var rel in relationShips)
+                    {
+                        var r = (IRelationship)rel;
+                        evidence.Relationships.Add(new Relationship() { EndNodeId = r.EndNodeId, StartNodeId = r.StartNodeId, Type = r.Type });
+                    }
+                }
+                catch (Exception e)
+                {
+
+                }
+
+
+
+                if (evidence != null)
+                    evidenceResult.Add(evidence);
+            }
+            return evidenceResult;
+        }
         private static void GetBaseArgument(List<IRecord> arguments, List<Argument> argumentsList)
         {
             try

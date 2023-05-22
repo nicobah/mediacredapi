@@ -16,6 +16,7 @@ using Microsoft.AspNetCore.Http;
 using Neo4jClient.Cypher;
 using Xunit.Sdk;
 using Microsoft.Extensions.Configuration;
+using System.Linq;
 
 namespace MediaCred.Controllers
 {
@@ -148,11 +149,25 @@ namespace MediaCred.Controllers
         [HttpGet("ArgTree")]
         public async Task<string> GetArgTree(string argId, string? userID)
         {
+            List<Relationship> relationships = new List<Relationship>();
             var args = await qs.GetRecursiveBackings(argId, userID);
-            var relationships = args.SelectMany(x => x.Relationships).ToList();
+
+            var evidence = await qs.GetEvidenceRelations(argId);
+
+            relationships.AddRange(args.SelectMany(x => x.Relationships));
+
+            relationships.AddRange(evidence.SelectMany(x => x.Relationships));
             relationships = relationships.GroupBy(x => x.StartNodeId.ToString() + x.EndNodeId.ToString()).Select(y => y.First()).ToList();
-            var nodes = args.Select(x => new { id = x.Neo4JInternalID, fill = x.IsValid ? "green" : "red", ll = x.Claim });
+            var nodesTemp = args.Select(x => new { id = x.Neo4JInternalID, fill = x.IsValid ? "green" : "red", ll = x.Claim });
+
+            var nodes = nodesTemp.ToList();
+            evidence.ForEach(x =>
+            {
+                nodes.Add(new { id = x.Neo4JInternalID, fill = "purple", ll = x.Name });
+            });
+
             var edges = relationships.Select(x => new { from = x.StartNodeId.ToString(), to = x.EndNodeId.ToString() });
+
             var data = new
             {
                 nodes,
@@ -429,7 +444,7 @@ namespace MediaCred.Controllers
             art.ID = Guid.NewGuid().ToString();
 
             var query = $"MATCH(aut:Author{{id: \"{art.AuthorID}\"}}) ";
-            query += GenerateCreateQuery(art, objtype: typeof(Article),objID: "a") + ", (a)-[:WRITTEN_BY]->(aut)";
+            query += GenerateCreateQuery(art, objtype: typeof(Article), objID: "a") + ", (a)-[:WRITTEN_BY]->(aut)";
 
             await qs.ExecuteQuery(query, new { art.ID, art.Title, art.AuthorID, art.Publisher, art.Link, art.InappropriateWords, art.References, art.Topic });
         }
