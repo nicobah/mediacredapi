@@ -90,16 +90,12 @@ namespace MediaCred.Models.Services
                 return await GetArticleFromResult(results, resultAuthors, resultUsedAsBacking, resultArguments);
             }
 
-
             return null;
         }
 
         public async Task<List<Argument>> GetArgumentsByArticleLink(string url, string? userID)
         {
-            if(url.Last() == '/')
-            {
-                url = url.Substring(0, url.Length - 1);
-            }
+           
             var query = @"MATCH (art:Article{link:$url})-[:CLAIMS]->(arg)
                             return arg";
 
