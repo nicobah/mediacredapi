@@ -152,29 +152,17 @@ namespace MediaCred.Controllers
         public async Task<string> GetArgTree(string argId, string? userID)
         {
             List<Relationship> relationships = new List<Relationship>();
-            List<Evidence> evidence = new List<Evidence>();
-            
-
             var args = await qs.GetRecursiveBackings(argId, userID);
-            var nodesTemp = args.Select(x => new { id = x.Neo4JInternalID, fill = x.IsValid ? "green" : "red", ll = x.Claim });
-            var nodes = nodesTemp.ToList();
+
+            var evidence = await qs.GetEvidenceRelations(argId);
 
             relationships.AddRange(args.SelectMany(x => x.Relationships));
-            foreach(var a in args)
-            {
-                var e = await qs.GetEvidenceRelations(a.ID);
-                foreach(var ev in e)
-                {
-                    evidence.Add(ev);
-                }
-            }
 
-            
-
-            evidence.AddRange(await qs.GetEvidenceRelations(argId));
             relationships.AddRange(evidence.SelectMany(x => x.Relationships));
             relationships = relationships.GroupBy(x => x.StartNodeId.ToString() + x.EndNodeId.ToString()).Select(y => y.First()).ToList();
-           
+            var nodesTemp = args.Select(x => new { id = x.Neo4JInternalID, fill = x.IsValid ? "green" : "red", ll = x.Claim });
+
+            var nodes = nodesTemp.ToList();
             evidence.ForEach(x =>
             {
                 nodes.Add(new { id = x.Neo4JInternalID, fill = "purple", ll = x.Name });
@@ -452,7 +440,7 @@ namespace MediaCred.Controllers
         {
 
             var query = $"MATCH(art:Article{{link: \"{dto.link}\"}}), (aut:Author{{id: \"{dto.authorId}\"}}) create (art)-[:WRITTEN_BY]->(aut)";
-
+            
 
             await qs.ExecuteQuery(query);
         }
@@ -480,12 +468,21 @@ namespace MediaCred.Controllers
         }
 
         [HttpPost("CreateArgument")]
-        public async Task CreateArgument(ArgumentDto argument)
+        public async Task CreateArgument(ArgumentDto argumentDto)
         {
-            argument.ID = Guid.NewGuid().ToString();
+            argumentDto.ID = Guid.NewGuid().ToString();
 
-            var query = $"MATCH(art:Article{{link: \"{argument.artLink}\"}}) ";
-            query += GenerateCreateQuery(argument, objtype: typeof(Argument), objID: "arg") + ", (art)-[:CLAIMS]->(arg)";
+            var query = $"MATCH(art:Article{{link: \"{argumentDto.artLink}\"}}) ";
+
+            var argument = new Argument
+            {
+                Claim = argumentDto.Claim,
+                Ground = argumentDto.Ground,
+                Warrant = argumentDto.Warrant,
+                ID = argumentDto.ID
+            };
+            
+            query += GenerateCreateQuery(argument, objID: "arg") + ", (art)-[:CLAIMS]->(arg)";
 
             await qs.ExecuteQuery(query, new { argument.Claim, argument.Ground, argument.Warrant });
         }
