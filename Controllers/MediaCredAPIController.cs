@@ -525,8 +525,8 @@ namespace MediaCred.Controllers
         {
 
 
-            var queryCreateBacking = $"MATCH(backedBy{{id: $disputedByIDByID}}), (backed{{id: \"{disputedID}\"}}) " +
-            $"CREATE (backed)-[:BACKED_BY]->(backedBy)";
+            var queryCreateBacking = $"MATCH(disputedBy{{id: \"{disputedByID}\"}}), (disputed{{id: \"{disputedID}\"}})" +
+            $"CREATE (disputed)-[:DISPUTED_BY]->(disputedBy)";
 
             await qs.ExecuteQuery(queryCreateBacking);
           
