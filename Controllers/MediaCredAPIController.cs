@@ -91,7 +91,7 @@ namespace MediaCred.Controllers
             {
                 var article = await qs.GetArticleByLink(dto.ArticleLink);
 
-                if (dto.AuthorEvals != null && dto.AuthorEvals.Count > 0 && article.Authors != null && article.Authors.Count > 0)
+                if (dto.AuthorEvals != null && dto.AuthorEvals.Count > 0 && article?.Authors != null && article.Authors.Count > 0)
                 {
                     foreach (var author in article.Authors)
                     {
@@ -524,23 +524,15 @@ namespace MediaCred.Controllers
 
 
         [HttpPost("CreateRebuttal")]
-        public async Task CreateRebuttal(string artID, string argID, string claimArtID)
+        public async Task CreateRebuttal(string disputedByID, string disputedID)
         {
-            var claimArticleOld = await qs.GetArticleByLink(claimArtID);
-            var subscribers = await qs.GetSubscribers(claimArticleOld);
 
-            //toulmin old results
-            var resultsOld = await GetToulminResultsForArgument(argID);
 
-            var queryCreateRebuttal = $"MATCH(art:Article{{id: \"{artID}\"}}), (arg:Argument{{claim: \"{argID}\"}}) " +
-            $"CREATE (arg)-[:DISPUTED_BY]->(art)";
+            var queryCreateBacking = $"MATCH(backedBy{{id: $disputedByIDByID}}), (backed{{id: \"{disputedID}\"}}) " +
+            $"CREATE (backed)-[:BACKED_BY]->(backedBy)";
 
-            var res = await qs.ExecuteQuery(queryCreateRebuttal, new { artID, argID });
-
-            var articleNew = await qs.GetArticleByLink(artID);
-            var claimArticleNew = await qs.GetArticleByLink(claimArtID);
-            await CheckForChangesInToulmin(resultsOld, claimArticleNew.Arguments.Where(x => x.Claim == argID).FirstOrDefault(), subscribers);
-            await CheckForChangesInCredibilityAndNotify(claimArtID, subscribers);
+            await qs.ExecuteQuery(queryCreateBacking);
+          
         }
 
         private async Task<List<IRecord>> GetToulminResultsForArgument(string argID)
