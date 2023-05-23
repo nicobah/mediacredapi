@@ -12,5 +12,7 @@ namespace MediaCred.Models
         public string? Ground { get; set; }
 
         public string? Warrant { get; set; }
+
+        public string? artLink { get; set; }
     }
 }
