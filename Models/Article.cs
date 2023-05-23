@@ -6,8 +6,6 @@ namespace MediaCred
     {
         public string Title { get; set; }
 
-        public string AuthorID { get; set; }
-
         public string? Publisher { get; set; }
         public string? Link { get; set; }
 

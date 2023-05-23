@@ -83,6 +83,7 @@ namespace MediaCred.Controllers
 
         }
 
+
         [HttpPost("ArticleCredibility")]
         public async Task<string> GetArticleCredibility(ArticleEvalDto dto)
         {
@@ -451,10 +452,18 @@ namespace MediaCred.Controllers
         {
             art.ID = Guid.NewGuid().ToString();
 
-            var query = $"MATCH(aut:Author{{id: \"{art.AuthorID}\"}}) ";
-            query += GenerateCreateQuery(art, objtype: typeof(Article), objID: "a") + ", (a)-[:WRITTEN_BY]->(aut)";
+            var query = GenerateCreateQuery(art, objtype: typeof(Article), objID: "a");
 
-            await qs.ExecuteQuery(query, new { art.ID, art.Title, art.AuthorID, art.Publisher, art.Link, art.InappropriateWords, art.References, art.Topic });
+            await qs.ExecuteQuery(query, new { art.ID, art.Title, art.Publisher, art.Link, art.InappropriateWords, art.References, art.Topic });
+        }
+        [HttpPost("AddAuthor")]
+        public async Task CreateArticle(AddAuthDto dto)
+        {
+
+            var query = $"MATCH(art:Article{{link: \"{dto.link}\"}}), (aut:Author{{id: \"{dto.authorId}\"}}) create (art)-[:WRITTEN_BY]->(aut)";
+            
+
+            await qs.ExecuteQuery(query);
         }
 
         [HttpPost("CreateAuthor")]
