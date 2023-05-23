@@ -468,14 +468,23 @@ namespace MediaCred.Controllers
         }
 
         [HttpPost("CreateArgument")]
-        public async Task CreateArgument(ArgumentDto argument)
+        public async Task CreateArgument(ArgumentDto argumentDto)
         {
-            argument.ID = Guid.NewGuid().ToString();
+            argumentDto.ID = Guid.NewGuid().ToString();
 
-            var query = $"MATCH(art:Article{{link: \"{argument.artLink}\"}}) ";
-            query += GenerateCreateQuery(argument, objtype: typeof(Argument), objID: "arg") + ", (art)-[:CLAIMS]->(arg)";
+            var query = $"MATCH(art:Article{{link: \"{argumentDto.artLink}\"}}) ";
 
-            await qs.ExecuteQuery(query, new {argument.Claim, argument.Ground, argument.Warrant });
+            var argument = new Argument
+            {
+                Claim = argumentDto.Claim,
+                Ground = argumentDto.Ground,
+                Warrant = argumentDto.Warrant,
+                ID = argumentDto.ID
+            };
+            
+            query += GenerateCreateQuery(argument, objID: "arg") + ", (art)-[:CLAIMS]->(arg)";
+
+            await qs.ExecuteQuery(query, new { argument.Claim, argument.Ground, argument.Warrant });
         }
 
         [HttpPost("CreateBacking")]
