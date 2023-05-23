@@ -340,9 +340,6 @@ namespace MediaCred.Models.Services
             if (article != null && authorResults != null && authorResults.Count > 0)
                 article.Authors = GetAuthorsFromArticleRelationship(authorResults);
 
-            if (article != null && backingResults != null)
-                article.UsedAsBacking = backingResults.Count;
-
             return article;
         }
 

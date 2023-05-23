@@ -247,27 +247,6 @@ namespace MediaCred.Controllers
             return "not implemented yet";
         }
 
-
-        [HttpGet("GetLinkToulmin")]
-        public async Task<string> GetLinkToulmin(string url)
-        {
-            var query = @"MATCH (art:Article{link: $url})-[r]->(b:Argument), (b)-[rTwo]->(a:Article)
-                            RETURN art, r, b, rTwo, a";
-
-            var results = await qs.ExecuteQuery(query, new { url });
-
-            if (results.Count == 0)
-            {
-                query = @"MATCH (art:Article{link: $url})-[r]->(b:Argument)
-                            RETURN art, r, b";
-
-                results = await qs.ExecuteQuery(query, new { url });
-            }
-
-
-            return JsonConvert.SerializeObject(await GetToulminString(results), Formatting.Indented);
-        }
-
         [HttpGet("GetToulminString")]
         public async Task<string> GetToulminString(string argID)
         {
@@ -586,8 +565,8 @@ namespace MediaCred.Controllers
             {
                 var resultsNew = await GetToulminResultsForArgument(newArg.Claim);
 
-                var toulminStringOld = await GetToulminString(oldArgResults);
-                var toulminStringNew = await GetToulminString(resultsNew);
+                var toulminStringOld = await GetToulminString(newArg.ID);
+                var toulminStringNew = await GetToulminString(newArg.ID);
 
                 var oldToulminScore = GetToulminScore(toulminStringOld);
                 var newToulminScore = GetToulminScore(toulminStringNew);
@@ -659,7 +638,6 @@ namespace MediaCred.Controllers
             }
 
             articleCred += new ArticleInformationEvaluation().GetEvaluation(article).Result * user.InformationWeight;
-            articleCred += new ArticleBackingEvaluation().GetEvaluation(article).Result * user.BackingsWeight;
             articleCred += new ArticleAuthorEvaluation().GetEvaluation(article).Result * user.AuthorWeight;
             articleCred += new ArticleIWEvaluation().GetEvaluation(article).Result * user.InappropriateWordsWeight;
             articleCred += new ArticleRefEvaluation().GetEvaluation(article).Result * user.ReferencesWeight;
@@ -772,77 +750,6 @@ namespace MediaCred.Controllers
                 }
             }
             return sb.ToString().Trim();
-        }
-
-        private async Task<string> GetToulminString(List<IRecord> resultRecords)
-        {
-            try
-            {
-                if (resultRecords.Any())
-                {
-                    var backingScore = 0.0;
-                    var backingCount = 0;
-
-                    var rebutScore = 0.0;
-                    var rebuttalCount = 0;
-
-                    foreach (var record in resultRecords)
-                    {
-                        var artOriginNode = JsonConvert.DeserializeObject<Article>(JsonConvert.SerializeObject(record[0].As<INode>().Properties));
-                        var claimedByRelation = JsonConvert.DeserializeObject<Relationship>(JsonConvert.SerializeObject(record[1].As<IRelationship>()));
-                        var argumentNode = JsonConvert.DeserializeObject<Argument>(JsonConvert.SerializeObject(record[2].As<INode>().Properties));
-
-                        if (record.Keys.Count <= 3)
-                        {
-                            if (argumentNode.Warrant != null && argumentNode.Warrant.Length > 1 && argumentNode.Ground != null && argumentNode.Ground.Length > 1)
-                            {
-                                return "normal fit";
-                            }
-
-                            return "weak fit";
-                        }
-
-                        if (record.Keys.Count == 5)
-                        {
-                            var backedOrDisputedRelation = JsonConvert.DeserializeObject<Relationship>(JsonConvert.SerializeObject(record[3].As<IRelationship>()));
-                            var backingOrRebutNode = JsonConvert.DeserializeObject<Article>(JsonConvert.SerializeObject(record[4].As<INode>().Properties));
-
-                            if (artOriginNode.Link != backingOrRebutNode.Link)
-                            {
-                                if (argumentNode.Warrant == null || argumentNode.Warrant.Length < 2 || argumentNode.Ground == null || argumentNode.Ground.Length < 2)
-                                    return "weak fit";
-
-                                if (backedOrDisputedRelation.Type.ToLower() == "backed_by")
-                                {
-                                    backingCount++;
-                                    backingScore += backingOrRebutNode.Credibility.HasValue ? backingOrRebutNode.Credibility.Value : 0;
-                                }
-                                else if (backedOrDisputedRelation.Type.ToLower() == "disputed_by")
-                                {
-                                    rebuttalCount++;
-                                    rebutScore += backingOrRebutNode.Credibility.HasValue ? backingOrRebutNode.Credibility.Value : 0;
-                                }
-                            }
-                        }
-                    }
-                    if (backingCount > 0 && rebuttalCount == 0)
-                        return "good fit";
-
-                    if (rebuttalCount > 0 && backingCount == 0)
-                        return "bad fit";
-
-                    if (backingCount == 0 && rebuttalCount == 0)
-                        return "normal fit";
-
-                    if (backingCount > 0 && rebuttalCount > 0)
-                    {
-                        return backingScore > rebutScore ? "good fit" : "bad fit";
-                    }
-                }
-            }
-            catch { }
-
-            return "unknown";
         }
 
         private async Task<List<NodeRelation>> GetNodesFromResult(List<IRecord> writeResults)
@@ -1062,10 +969,6 @@ namespace MediaCred.Controllers
             {
                 return user.AuthorWeight;
             }
-            else if (type == typeof(ArticleBackingEvaluation))
-            {
-                return user.BackingsWeight;
-            }
             else { return null; }
         }
 
@@ -1083,8 +986,6 @@ namespace MediaCred.Controllers
                     return new ArticleTopicEvaluation();
                 case "author":
                     return new ArticleAuthorEvaluation();
-                case "backings":
-                    return new ArticleBackingEvaluation();
                 default:
                     return null;
             }

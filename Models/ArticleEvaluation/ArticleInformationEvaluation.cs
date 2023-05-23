@@ -7,7 +7,10 @@
 
         public async Task<double> GetEvaluation(Article art)
         {
-            var propCount = typeof(Article).GetProperties().Length;
+            var propList = typeof(Article).GetProperties();
+            var finalPropList = propList.Where(x => x.Name.ToLower() == "authors" || x.Name.ToLower() == "arguments").ToList();
+            var propCount = finalPropList.Count;
+
             //Calculate the weight for each property based on the number of properties in an author
             double propertiesWeight = 100 / (double)propCount;
             double result = 0;
@@ -20,7 +23,7 @@
                     }
                 }
             }
-            return Math.Round(result, 2);
+            return result > 100 ? 100.0 : Math.Round(result, 2);
         }
     }
 }
