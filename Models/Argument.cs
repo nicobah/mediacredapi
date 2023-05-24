@@ -12,7 +12,7 @@ namespace MediaCred
         public string? Warrant { get; set; }
         public bool IsValid { get; set; } = false;
 
-        public int? Weight { get; set; } = 1;
+        public double? Weight { get; set; } = 1;
 
 
         public override string GetFullString()

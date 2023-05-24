@@ -51,6 +51,41 @@ namespace MediaCred.Models.Services
             }
         }
 
+        public async Task<double> GetConsistencyWeightForArgument(string argID)
+        {
+            var queryHasEvidence = @"MATCH(e:Evidence)-[:PROVES]->(arg1:Argument{id:$argID})
+                                        RETURN arg1";
+
+            var resultsEvidence = await ExecuteQuery(queryHasEvidence, new { argID });
+
+            var queryBackedByEvidence = @"MATCH (arg1:Argument{id:$argID})-[:BACKED_BY*1..]->(:Argument)<-[:PROVES]-(:Evidence)
+                                            RETURN arg1";
+
+            var resultsBackedByEvidence = await ExecuteQuery(queryBackedByEvidence, new { argID });
+
+            var queryDisputedByEvidence = @"MATCH (arg1:Argument{id:$argID})-[:DISPUTED_BY*1..]->(:Argument)<-[:PROVES]-(:Evidence)
+                                            RETURN arg1";
+
+            var resultsDisputedByEvidence = await ExecuteQuery(queryDisputedByEvidence, new { argID });
+
+            if (resultsEvidence.Count() > 0 && resultsDisputedByEvidence.Count() <= 0)
+                return 1.0;
+
+            if (resultsEvidence.Count() <= 0 && resultsBackedByEvidence.Count() <= 0 && resultsDisputedByEvidence.Count() <= 0)
+                return 0.0;
+
+            if (resultsBackedByEvidence.Count() > 0 && resultsDisputedByEvidence.Count() <= 0)
+                return 1.0;
+
+            if ((resultsBackedByEvidence.Count() > 0 && resultsDisputedByEvidence.Count() > 0) || (resultsEvidence.Count() > 0 && resultsDisputedByEvidence.Count() > 0))
+                return 0.5;
+
+            if (resultsDisputedByEvidence.Count() > 0 && resultsBackedByEvidence.Count() <= 0 && resultsEvidence.Count() <= 0)
+                return -1.0;
+
+            return 0.0;
+        }
+
         public async Task<User?> CreateUser()
         {
             var u = new User();
