@@ -98,6 +98,13 @@ namespace MediaCred.Models.Services
 
         }
 
+        public async Task<bool> SetNudge(string id, DateTime nextnudge )
+        {
+            var query = $"MATCH (u:User{{id: \"{id}\"}}) SET u.nextnudge = date(\"{nextnudge.Date.ToString("yyyy-MM-dd")}\")";
+            await ExecuteQuery(query);
+            return true;
+        }
+
         public async Task<Article?> GetArticleByLink(string url)
         {
             var query = @"MATCH (art:Article{link:$url})

@@ -201,7 +201,7 @@ namespace MediaCred.Controllers
         [HttpGet("GetNudge")]
         public async Task<string> GetNudge(string id)
         {
-            User? user = await GetUserByID(id);
+           User? user = await GetUserByID(id);
             //Check if nudge time has been exceeded
             if (user?.NextNudge < DateTime.Now)
             {
@@ -212,7 +212,7 @@ namespace MediaCred.Controllers
                 .Build();
                 var h = new Helper(config);
                 var nextNudge = h.GetNextNudge(user);
-
+                await qs.SetNudge(user.ID, nextNudge);
                 //Get the last article read with a topic
                 var topic = await user.GetLatestTopic(qs);
 
