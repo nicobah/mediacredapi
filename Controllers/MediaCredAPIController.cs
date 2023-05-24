@@ -83,6 +83,41 @@ namespace MediaCred.Controllers
 
         }
 
+        [HttpGet("GetArgumentConsistencyScore")]
+        public async Task<double> GetArgumentConsistencyScore(string argID)
+        {
+            var queryHasEvidence = @"MATCH(e:Evidence)-[:PROVES]->(arg1:Argument{id:$argID})";
+
+            var resultsEvidence = await qs.ExecuteQuery(queryHasEvidence, new { argID });
+
+            var queryBackedByEvidence = @"MATCH (arg1:Argument{id:$argID})-[:BACKED_BY*1..]->(:Argument)<-[:PROVES]-(:Evidence)
+                                            RETURN arg1";
+
+            var resultsBackedByEvidence = await qs.ExecuteQuery(queryBackedByEvidence, new { argID });
+
+            var queryDisputedByEvidence = @"MATCH (arg1:Argument{id:$argID})-[:DISPUTED_BY*1..]->(:Argument)<-[:PROVES]-(:Evidence)
+                                            RETURN arg1";
+
+            var resultsDisputedByEvidence = await qs.ExecuteQuery(queryDisputedByEvidence, new { argID });
+
+            if(queryHasEvidence.Count() > 0 && resultsDisputedByEvidence.Count() <= 0)
+                return 1.0;
+
+            if(queryHasEvidence.Count() <= 0 && resultsBackedByEvidence.Count() <= 0 && resultsDisputedByEvidence.Count() <= 0)
+                return 0.0;
+
+            if(queryBackedByEvidence.Count() > 0 && resultsDisputedByEvidence.Count() <= 0)
+                return 1.0;
+
+            if (queryBackedByEvidence.Count() > 0 && resultsDisputedByEvidence.Count() > 0)
+                return 0.5;
+
+            if (queryDisputedByEvidence.Count() > 0 && resultsBackedByEvidence.Count() <= 0 && resultsEvidence.Count() <= 0)
+                return -1.0;
+
+            return 2.0;
+        }
+
 
         [HttpPost("ArticleCredibility")]
         public async Task<string> GetArticleCredibility(ArticleEvalDto dto)
