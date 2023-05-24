@@ -86,7 +86,8 @@ namespace MediaCred.Controllers
         [HttpGet("GetArgumentConsistencyScore")]
         public async Task<double> GetArgumentConsistencyScore(string argID)
         {
-            var queryHasEvidence = @"MATCH(e:Evidence)-[:PROVES]->(arg1:Argument{id:$argID})";
+            var queryHasEvidence = @"MATCH(e:Evidence)-[:PROVES]->(arg1:Argument{id:$argID})
+                                        RETURN arg1";
 
             var resultsEvidence = await qs.ExecuteQuery(queryHasEvidence, new { argID });
 
