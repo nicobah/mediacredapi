@@ -158,7 +158,14 @@ namespace MediaCred.Controllers
         public async Task<string> GetArgTree(string argId, string? userID)
         {
             List<Relationship> relationships = new List<Relationship>();
-            var args = await qs.GetRecursiveBackings(argId, userID);
+            var args = new List<Argument>();
+            
+            var baseArg = await qs.GetArgumentByArgID(argId);
+            
+            if (baseArg != null)
+                args.Add(baseArg);
+            
+            args.AddRange(await qs.GetRecursiveBackings(argId, userID));
 
             var evidence = await qs.GetEvidenceRelations(argId);
 

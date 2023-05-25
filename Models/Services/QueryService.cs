@@ -323,8 +323,14 @@ namespace MediaCred.Models.Services
         }
         public async Task<List<Evidence>> GetEvidenceRelations(string argID)
         {
-            var query = $"MATCH(e:Evidence)-[b:PROVES*..]->(a2:Argument{{id: \"{argID}\"}}) return e,b";
+            var query = $"MATCH (e:Evidence)-[b:PROVES]->(a2:Argument{{id: \"{argID}\"}}) return e,b";
             var results = await ExecuteQuery(query, null);
+
+            if(results.Count <= 0)
+            {
+                query = $"MATCH (e:Evidence)-[b:PROVES]->(arg:Argument)<-[:BACKED_BY*..]-(a2:Argument{{id: \"{argID}\"}}) return e,b";
+                results = await ExecuteQuery(query, null);
+            }
 
             return await GetAllEvidenceFromResults(results);
         }
@@ -589,12 +595,23 @@ namespace MediaCred.Models.Services
                 try
                 {
 
-                    var relationShips = (List<Object>)ev.Values.Where(x => x.Key == "b").First().Value;
-                    foreach (var rel in relationShips)
+                    //var relationShips = (List<Object>)ev.Values.Where(x => x.Key == "b").First().Value;
+                    var relationValue = ev.Values.Where(x => x.Key == "b").First().Value;
+                    try
                     {
-                        var r = (IRelationship)rel;
+                        var relationShips = (List<Object>)ev.Values.Where(x => x.Key == "b").First().Value;
+                        foreach (var rel in relationShips)
+                        {
+                            var r = (IRelationship)rel;
+                            evidence.Relationships.Add(new Relationship() { EndNodeId = r.EndNodeId, StartNodeId = r.StartNodeId, Type = r.Type });
+                        }
+                    }
+                    catch
+                    {
+                        var r = (IRelationship)relationValue;
                         evidence.Relationships.Add(new Relationship() { EndNodeId = r.EndNodeId, StartNodeId = r.StartNodeId, Type = r.Type });
                     }
+                    
                 }
                 catch (Exception e)
                 {
@@ -623,6 +640,26 @@ namespace MediaCred.Models.Services
             catch (Exception e) { }
 
         }
+
+        public async Task<Argument> GetArgumentByArgID(string argID)
+        {
+            var query = @"MATCH(a:Argument{id:$argID}) 
+                            RETURN a";
+
+            var results = await ExecuteQuery(query, new {argID});
+
+            var argNode = results[0].Values.First().Value;
+
+            var node = (INode)argNode;
+
+            var argProps = JsonConvert.SerializeObject(argNode.As<INode>().Properties);
+
+            var arg = JsonConvert.DeserializeObject<Argument>(argProps);
+            arg.Neo4JInternalID = node.Id;
+
+            return arg;
+        }
+
 
         private User? GetUserFromResult(List<IRecord> results)
         {
