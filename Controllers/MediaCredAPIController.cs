@@ -492,17 +492,10 @@ namespace MediaCred.Controllers
 
             var query = $"MATCH(art:Article{{link: \"{argumentDto.artLink}\"}}) ";
 
-            var argument = new Argument
-            {
-                Claim = argumentDto.Claim,
-                Ground = argumentDto.Ground,
-                Warrant = argumentDto.Warrant,
-                ID = argumentDto.ID
-            };
-            
-            query += GenerateCreateQuery(argument, objID: "arg") + ", (art)-[:CLAIMS]->(arg)";
+            query += $"CREATE(arg:Argument{{id: \"{argumentDto.ID}\", claim: \"{argumentDto.Claim}\", ground: \"{argumentDto.Ground}\", warrant: \"{argumentDto.Warrant}\", isValid: false}})," +
+                $"(art)-[:CLAIMS]->(arg)";
 
-            await qs.ExecuteQuery(query, new { argument.Claim, argument.Ground, argument.Warrant });
+            await qs.ExecuteQuery(query, new { argumentDto.ID, argumentDto.Claim, argumentDto.Ground, argumentDto.Warrant });
         }
 
         [HttpPost("CreateBacking")]
