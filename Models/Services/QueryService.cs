@@ -308,7 +308,7 @@ namespace MediaCred.Models.Services
 
             return null;
         }
-        public async Task<List<Argument>> GetRecursiveBackings(string argID, string? userID)
+        public async Task<List<Argument>> GetRecursiveBackings(string argID, string? userID, Argument baseArg = null)
         {
             var query = $"MATCH(a:Argument{{id: \"{argID}\"}}) OPTIONAL MATCH (a)-[b:BACKED_BY*..]->(a2) return a2,a,b";
             var results = await ExecuteQuery(query, null);
@@ -318,7 +318,7 @@ namespace MediaCred.Models.Services
             //    var results2 = await ExecuteQuery(query2, null);
             //    return await GetArgumentsFromResult(results2, userID);
             //}
-            return await GetArgumentsFromResult(results, userID);
+            return await GetArgumentsFromResult(results, userID, baseArg);
 
         }
         public async Task<List<Evidence>> GetEvidenceRelations(string argID)
@@ -449,12 +449,15 @@ namespace MediaCred.Models.Services
             return results.Any();
         }
 
-        private async Task<List<Argument>> GetArgumentsFromResult(List<IRecord> arguments, string userID = null)
+        private async Task<List<Argument>> GetArgumentsFromResult(List<IRecord> arguments, string userID = null, Argument baseArg = null)
         {
             var argumentsList = new List<Argument>();
             var isAccepted = false;
             string? acceptedID = null;
-
+            if(baseArg != null)
+            {
+                argumentsList.Add(baseArg);
+            }
             foreach (var arg in arguments)
             {
                 var argNode = (INode)arg.Values.First().Value;
@@ -484,10 +487,13 @@ namespace MediaCred.Models.Services
                 {
 
                     var relationShips = (List<Object>)arg.Values.Where(x => x.Key == "b").First().Value;
-                    foreach (var rel in relationShips)
+                    if(relationShips!=null && relationShips.Count > 0)
                     {
-                        var r = (IRelationship)rel;
-                        argument.Relationships.Add(new Relationship() { EndNodeId = r.EndNodeId, StartNodeId = r.StartNodeId, Type = r.Type });
+                        foreach (var rel in relationShips)
+                        {
+                            var r = (IRelationship)rel;
+                            argument.Relationships.Add(new Relationship() { EndNodeId = r.EndNodeId, StartNodeId = r.StartNodeId, Type = r.Type });
+                        }
                     }
                 }
                 catch (Exception e)
@@ -521,13 +527,23 @@ namespace MediaCred.Models.Services
                         var argPropsJson = JsonConvert.SerializeObject(argNode.Properties);
                         var argument = JsonConvert.DeserializeObject<Argument>(argPropsJson);
 
-                        var queryTwo = $"MATCH(arg:Argument)<-[:BACKED_BY]-(argOrigin:Argument{{id: \"{argument.ID}\" }})" +
+                        var queryTwoOne = $"MATCH(arg:Argument)<-[:BACKED_BY]-(argOrigin:Argument{{id: \"{argument.ID}\" }})" +
+                        $" RETURN arg";
+
+                        var resultsTwoOne = await ExecuteQuery(queryTwoOne);
+                        var resultsTwoTwo = new List<IRecord>();
+                        
+                        if(resultsTwoOne.Count > 1)
+                        {
+                            var queryTwoTwo = $"MATCH(arg:Argument)<-[:BACKED_BY]-(argOrigin:Argument{{id: \"{argument.ID}\" }})" +
                         $" WHERE NOT arg.id = \"{originID}\" AND NOT arg.IsValid = false" +
                         $" RETURN arg";
 
-                        var resultsTwo = await ExecuteQuery(queryTwo);
+                            resultsTwoTwo = await ExecuteQuery(queryTwoTwo);
+                        }
 
-                        if (!resultsTwo.Any())
+
+                        if (resultsTwoOne.Count == 1 || !resultsTwoTwo.Any())
                         {
                             argument.IsValid = true;
                             var existingArg = argumentsList.Where(x => x.ID == argument.ID).FirstOrDefault();
@@ -540,10 +556,10 @@ namespace MediaCred.Models.Services
                                 argumentsList.Add(argument);
                             }
                         }
-                        else
+                        else if(resultsTwoOne.Count > 1) { }
                         {
                             var validCount = 0;
-                            foreach (var res in resultsTwo)
+                            foreach (var res in resultsTwoTwo)
                             {
                                 var argNodeTwo = res.Values.First().Value as INode;
                                 var argPropsJsonTwo = JsonConvert.SerializeObject(argNodeTwo.Properties);
@@ -552,7 +568,7 @@ namespace MediaCred.Models.Services
                                 if (argumentTwo.IsValid)
                                     validCount++;
                             }
-                            if (validCount == resultsTwo.Count)
+                            if (validCount == resultsTwoTwo.Count)
                             {
                                 argument.IsValid = true;
                                 var existingArg = argumentsList.Where(x => x.ID == argument.ID).FirstOrDefault();
@@ -692,14 +708,30 @@ namespace MediaCred.Models.Services
             return authors;
         }
 
-        public async Task<Dictionary<User, double>> GetSubscribers(Article art)
+        public async Task<List<User>> GetSubscribers(Article art)
         {
-            var query = @"MATCH (sub:User)-[score:SUBSCRIBES_TO]->(art:Article)
-                            RETURN sub, score";
+            var query = $"MATCH (u:User) WHERE \"{art.ID}\" IN u.articlesRead RETURN u";
 
             var results = await ExecuteQuery(query);
 
-            return GetUsersAndScoresFromResult(results);
+            return GetUsersFromResult(results);
+        }
+
+        private List<User> GetUsersFromResult(List<IRecord> results)
+        {
+            var users = new List<User>();
+            foreach (var userRes in results)
+            {
+                var userNode = userRes.Values.First().Value;
+
+                var userPropsJson = JsonConvert.SerializeObject(userNode.As<INode>().Properties);
+
+                var user = JsonConvert.DeserializeObject<User>(userPropsJson);
+
+                users.Add(user);
+            }
+
+            return users;
         }
 
         public async Task<Dictionary<string, double>> GetSubscribersStringKey(Article art)

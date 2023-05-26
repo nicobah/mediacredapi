@@ -159,13 +159,16 @@ namespace MediaCred.Controllers
         {
             List<Relationship> relationships = new List<Relationship>();
             var args = new List<Argument>();
-            
+
             var baseArg = await qs.GetArgumentByArgID(argId);
-            
+
             if (baseArg != null)
                 args.Add(baseArg);
-            
-            args.AddRange(await qs.GetRecursiveBackings(argId, userID));
+
+            var backingArgs = await qs.GetRecursiveBackings(argId, userID, baseArg);
+            backingArgs.AddRange(args.Where(x => !backingArgs.Any(y => y.ID == x.ID)));
+
+            args = backingArgs;
 
             var evidence = await qs.GetEvidenceRelations(argId);
 
@@ -174,6 +177,8 @@ namespace MediaCred.Controllers
             relationships.AddRange(evidence.SelectMany(x => x.Relationships));
             relationships = relationships.GroupBy(x => x.StartNodeId.ToString() + x.EndNodeId.ToString()).Select(y => y.First()).ToList();
             var nodesTemp = args.Select(x => new { id = x.Neo4JInternalID, fill = x.IsValid ? "green" : "red", ll = x.Claim });
+
+
 
             var nodes = nodesTemp.ToList();
             evidence.ForEach(x =>
@@ -208,7 +213,7 @@ namespace MediaCred.Controllers
         [HttpGet("GetNudge")]
         public async Task<string> GetNudge(string id)
         {
-           User? user = await GetUserByID(id);
+            User? user = await GetUserByID(id);
             //Check if nudge time has been exceeded
             if (user?.NextNudge < DateTime.Now)
             {
@@ -429,7 +434,7 @@ namespace MediaCred.Controllers
         public async Task<List<Argument>> GetArgsByArtLink(string url, string? userID)
         {
             var res = await qs.GetArgumentsByArticleLink(url, userID);
-            foreach(var arg in res)
+            foreach (var arg in res)
             {
                 arg.Weight = await qs.GetConsistencyWeightForArgument(arg.ID);
             }
@@ -458,17 +463,22 @@ namespace MediaCred.Controllers
         {
 
             var query = $"MATCH(art:Article{{link: \"{dto.link}\"}}), (aut:Author{{id: \"{dto.authorId}\"}}) create (art)-[:WRITTEN_BY]->(aut)";
-            
+
 
             await qs.ExecuteQuery(query);
         }
 
         [HttpPost("CreateAuthor")]
-        public async Task CreateAuthor(AuthorApiDto author)
+        public async Task CreateAuthor(string? artLink, AuthorApiDto author)
         {
             author.ID = Guid.NewGuid().ToString();
 
             var query = GenerateCreateQuery(author, objtype: typeof(Author));
+
+            if(artLink != null && artLink.Length > 1)
+            {
+                query = $"MATCH(art:Article{{link:\"{artLink}\"}}) " + query + ", (art)-[:WRITTEN_BY]->(o)";
+            }
 
             await qs.ExecuteQuery(query);
         }
@@ -499,8 +509,20 @@ namespace MediaCred.Controllers
         }
 
         [HttpPost("CreateBacking")]
-        public async Task CreateBacking(string backedByID, string backedID)
+        public async Task CreateBacking(string backedByID, string backedID, string userID, ArticleEvalDto evals)
         {
+            var oldArticle = await qs.GetArticleByArgumentID(backedID);
+            var subscribers = new List<User>();
+            var oldArticleScore = 0.0;
+
+            if (oldArticle != null)
+            {
+                subscribers = await qs.GetSubscribers(oldArticle);
+                var oldArticleScoreString = await GetArticleCredibility(evals);
+                if (oldArticleScoreString != null && oldArticleScoreString.Length > 0)
+                    oldArticleScore = await GetTotalArticleScore(oldArticleScoreString, evals.ArticleLink, userID);
+            }
+
             var isValidOrEvidence = await qs.IsBackingValid(backedByID);
 
             var isAllBackingsValid = await qs.IsAllBackingsValid(backedID);
@@ -510,12 +532,76 @@ namespace MediaCred.Controllers
 
             await qs.ExecuteQuery(queryCreateBacking, new { backedByID });
 
-            var article = await qs.GetArticleByArgumentID(backedID);
-            if (article != null)
+
+            if (oldArticle != null)
             {
-                var subscribers = await qs.GetSubscribers(article);
-                await CheckForChangesInCredibilityAndNotify(article.ID, subscribers);
+                await CheckForChangesInCredibilityAndNotify(oldArticleScore, userID, subscribers, evals);
             }
+        }
+
+        private async Task<double> GetTotalArticleScore(string scores, string artLink, string userID)
+        {
+            var itemList = JsonConvert.DeserializeObject<List<Scores>>(scores);
+
+            var totalScore = 0.0;
+            var totalWeight = 0.0;
+
+            for (var i = 0; i < itemList.Count(); i++)
+            {
+                var score = itemList[i].Item1;
+                var weight = itemList[i].Item2;
+
+                totalScore += score * weight;
+                totalWeight += weight;
+            }
+
+            var sourceScore = totalScore / totalWeight;
+
+            var arguments = await GetArgsByArtLink(artLink, userID);
+            var contentScore = 0.0;
+            var u = 100 / arguments.Count();
+            foreach(var arg in arguments)
+            {
+                var weight = arg.Weight.HasValue ? arg.Weight.Value : 1;
+                contentScore += u * weight;
+            }
+
+            var finalScore = (sourceScore * 0.5) + (contentScore * 0.5);
+
+            return finalScore;
+        }
+
+        private Dictionary<string, double> GetScoresFromScoreJSON(string scores)
+        {
+            var itemList = JsonConvert.DeserializeObject <List<Scores>>(scores);
+            var dictionary = new Dictionary<string, double>();
+
+            foreach (var item in itemList)
+            {
+                if (!dictionary.ContainsKey(item.Item4))
+                {
+                    dictionary[item.Item4] = item.Item1;
+                }
+            }
+
+            return dictionary;
+        }
+
+        private Dictionary<string, Dictionary<double, double>> CombineScoresInDict(Dictionary<string, double> oldScores, Dictionary<string, double> newScores)
+        {
+            var dict = new Dictionary<string, Dictionary<double, double>>();
+
+            foreach(var score in oldScores)
+            {
+                try
+                {
+                    dict[score.Key] = new Dictionary<double, double>();
+                    dict[score.Key][score.Value] = newScores[newScores.Keys.Where(x => x == score.Key).FirstOrDefault()];
+                }
+                catch { }
+            }
+
+            return dict;
         }
 
         [HttpPost("AddArticleReadToUser")]
@@ -532,15 +618,62 @@ namespace MediaCred.Controllers
 
 
         [HttpPost("CreateRebuttal")]
-        public async Task CreateRebuttal(string disputedByID, string disputedID)
+        public async Task CreateRebuttal(string disputedByID, string disputedID, string userID, ArticleEvalDto evals)
         {
+            var oldArticle = await qs.GetArticleByArgumentID(disputedID);
+            var subscribers = new List<User>();
+            var oldArticleScore = 0.0;
+
+            if (oldArticle != null)
+            {
+                subscribers = await qs.GetSubscribers(oldArticle);
+                var oldArticleScoreString = await GetArticleCredibility(evals);
+                if (oldArticleScoreString != null && oldArticleScoreString.Length > 0)
+                    oldArticleScore = await GetTotalArticleScore(oldArticleScoreString, evals.ArticleLink, userID);
+            }
+
+            var isValidOrEvidence = await qs.IsBackingValid(disputedByID);
+
+            var isAllBackingsValid = await qs.IsAllBackingsValid(disputedID);
+
+            var queryCreateDispute = $"MATCH(disputedBy{{id: \"{disputedByID}\"}}), (disputed{{id: \"{disputedID}\"}})" +
+            $"CREATE (disputed)-[:DISPUTED_BY]->(disputedBy), (evd:Evidence{{id:\"artID{oldArticle.ID}evdTest\"}}), (evd)-[:PROVES]->(disputedBy) SET disputed.IsValid = {isAllBackingsValid && isValidOrEvidence}";
+
+            await qs.ExecuteQuery(queryCreateDispute);
 
 
-            var queryCreateBacking = $"MATCH(disputedBy{{id: \"{disputedByID}\"}}), (disputed{{id: \"{disputedID}\"}})" +
-            $"CREATE (disputed)-[:DISPUTED_BY]->(disputedBy)";
+            if (oldArticle != null)
+            {
+                await CheckForChangesInCredibilityAndNotify(oldArticleScore, userID, subscribers, evals);
+            }
+        }
 
-            await qs.ExecuteQuery(queryCreateBacking);
-          
+        [HttpPost("AddArticleRead")]
+        public async Task AddArticleRead(string userID, string url)
+        {
+            var queryArticle = @"MATCH(art:Article{link:$url}) RETURN art";
+
+            var resultsArticle = await qs.ExecuteQuery(queryArticle, new {url});
+
+            var queryUser = @"MATCH(usr:User{id:$userID}) RETURN usr";
+
+            var resultsUser = await qs.ExecuteQuery(queryUser, new { userID });
+
+            if (resultsArticle.Count > 0 && resultsUser.Count > 0)
+            {
+                try
+                {
+                    var artNode = resultsArticle[0].Values.First().Value;
+                    var artPropsJson = JsonConvert.SerializeObject(artNode.As<INode>().Properties);
+                    var article = JsonConvert.DeserializeObject<Article>(artPropsJson);
+
+                    if (article != null)
+                    {
+                        var queryAddArticleID = $"MATCH(usr:User{{id: \"{userID}\"}}) WHERE NOT \"{article.ID}\" IN usr.articlesRead SET usr.articlesRead = usr.articlesRead + \"{article.ID}\"";
+                        await qs.ExecuteQuery(queryAddArticleID);
+                    }
+                } catch { }
+            }
         }
 
         private async Task<List<IRecord>> GetToulminResultsForArgument(string argID)
@@ -604,25 +737,24 @@ namespace MediaCred.Controllers
             }
         }
 
-        private async Task CheckForChangesInCredibilityAndNotify(string artID, Dictionary<User, double> oldSubscribersAndScores)
+        private async Task CheckForChangesInCredibilityAndNotify(double oldArticleScore, string userID, List<User> subscribers, ArticleEvalDto evals)
         {
-            var articleNew = await qs.GetArticleByLink(artID);
-            foreach (var subPair in oldSubscribersAndScores)
+            var articleNew = await qs.GetArticleByLink(evals.ArticleLink);
+            var newScoreString = await GetArticleCredibility(evals);
+            if (newScoreString != null && newScoreString.Length > 0)
             {
-                var newScore = GetArticleCredibility(articleNew, subPair.Key);
+                var newScore = await GetTotalArticleScore(newScoreString, evals.ArticleLink, userID);
 
-                if (newScore < subPair.Value - 10)
+                if (newScore < oldArticleScore - 10)
                 {
-                    var es = new EmailService();
-                    es.Send("alextholle@gmail.com",
-                        "An article you follow has decreased in credibility!",
-                        "The article " + articleNew.Title + " has fallen in credibility with more than 10 points. Please review it and check if it is not trustworthy anymore.");
-
-                    //TO-DO: Update the SUBSCRIBES_TO relationships with the new scores.
-                    var usrID = subPair.Key.ID;
-                    var query = $"MATCH(usr:User{{id:\"$usrID\"}})-[score:SUBSCRIBES_TO]->(art:Article{{id:\"$artID\"}})" +
-                        $"SET score.score = $newScore";
-                    await qs.ExecuteQuery(query, new { usrID, artID, newScore });
+                    foreach (var sub in subscribers)
+                    {
+                        //User should have an email and then it should send to that
+                        var es = new EmailService();
+                        es.Send("alextholle@gmail.com",
+                            "An article you follow has decreased in credibility!",
+                            "The article " + articleNew.Title + " has fallen in credibility with more than 10 points. Please review it and check if it is not trustworthy anymore.");
+                    }
                 }
             }
         }
